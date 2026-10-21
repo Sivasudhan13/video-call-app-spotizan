@@ -81,8 +81,11 @@ export function useWebRTC() {
   // Request media devices with Crystal Clear HD settings & graceful compatibility fallback
   const initLocalStream = async (mode = 'VIDEO') => {
     if (localStreamRef.current && localStreamRef.current.active) {
+      setHasLocalVideo(localStreamRef.current.getVideoTracks().some((t) => t.readyState === 'live'));
       if (localVideoRef.current && mode === 'VIDEO') {
-        localVideoRef.current.srcObject = localStreamRef.current;
+        if (localVideoRef.current.srcObject !== localStreamRef.current) {
+          localVideoRef.current.srcObject = localStreamRef.current;
+        }
         localVideoRef.current.play().catch(() => {});
       }
       return localStreamRef.current;
@@ -181,12 +184,12 @@ export function useWebRTC() {
       });
     }
 
-    // Only add recvonly fallback transceivers if local tracks were not available yet
+    // Ensure bidirectional transceivers are always configured for two-way audio/video
     if (!addedKinds.has('video')) {
-      try { pc.addTransceiver('video', { direction: 'recvonly' }); } catch (e) {}
+      try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (e) {}
     }
     if (!addedKinds.has('audio')) {
-      try { pc.addTransceiver('audio', { direction: 'recvonly' }); } catch (e) {}
+      try { pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (e) {}
     }
 
     // Handle remote track with robust track & stream binding
@@ -198,35 +201,64 @@ export function useWebRTC() {
         if (!remoteStreamRef.current) {
           remoteStreamRef.current = new MediaStream();
         }
-        remoteStreamRef.current.addTrack(event.track);
+        const existingTrack = remoteStreamRef.current.getTracks().find((t) => t.id === event.track.id);
+        if (!existingTrack) {
+          remoteStreamRef.current.addTrack(event.track);
+        }
         stream = remoteStreamRef.current;
       }
 
       if (stream) {
-        remoteStreamRef.current = stream;
-        setRemoteStream(stream);
-        setHasRemoteVideo(true);
+        // Clone stream reference to force React state updates and video element refresh
+        const freshStream = new MediaStream(stream.getTracks());
+        remoteStreamRef.current = freshStream;
+        setRemoteStream(freshStream);
+
+        const hasVideo = freshStream.getVideoTracks().some((t) => t.readyState === 'live');
+        setHasRemoteVideo(hasVideo);
         setStatus('ACTIVE'); // Remote stream established, call is active
 
         if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = stream;
+          if (remoteVideoRef.current.srcObject !== freshStream) {
+            remoteVideoRef.current.srcObject = freshStream;
+          }
           remoteVideoRef.current.play().catch(() => {});
         }
-        stream.getVideoTracks().forEach((track) => {
-          track.onunmute = () => setHasRemoteVideo(true);
-          track.onended = () => setHasRemoteVideo(false);
+
+        freshStream.getVideoTracks().forEach((track) => {
+          track.onunmute = () => {
+            setHasRemoteVideo(true);
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.srcObject = remoteStreamRef.current;
+              remoteVideoRef.current.play().catch(() => {});
+            }
+          };
+          track.onended = () => {
+            const stillHasVideo = remoteStreamRef.current?.getVideoTracks().some((t) => t.readyState === 'live');
+            setHasRemoteVideo(Boolean(stillHasVideo));
+          };
         });
+
+        event.track.onunmute = () => {
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = remoteStreamRef.current;
+            remoteVideoRef.current.play().catch(() => {});
+          }
+        };
       }
     };
 
     // Handle local ICE candidates
     pc.onicecandidate = (event) => {
-      if (event.candidate) {
+      if (event.candidate && event.candidate.candidate) {
         const sid = currentSessionId || sessionIdRef.current;
         if (sid) {
           socket.emit('call:signal', {
             sessionId: sid,
-            signal: { type: 'candidate', candidate: event.candidate },
+            signal: {
+              type: 'candidate',
+              candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
+            },
           });
         }
       }
@@ -236,6 +268,11 @@ export function useWebRTC() {
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'connected') {
         setStatus('ACTIVE');
+        // Ensure remote video plays upon connection state confirmation
+        if (remoteVideoRef.current && remoteStreamRef.current) {
+          remoteVideoRef.current.srcObject = remoteStreamRef.current;
+          remoteVideoRef.current.play().catch(() => {});
+        }
       } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
         setErrorMessage('Network connection lost between video peers.');
       }
@@ -409,11 +446,7 @@ export function useWebRTC() {
         let pc = peerConnectionRef.current;
 
         if (signal.type === 'offer') {
-          if (!pc || pc.signalingState === 'closed') {
-            pc = createPeerConnection(sid);
-          }
-
-          // Ensure local camera tracks are ready and added to pc before creating answer
+          // 1. Ensure local camera tracks are ready BEFORE creating or updating peer connection
           let stream = localStreamRef.current;
           if (!stream || !stream.active) {
             try {
@@ -421,11 +454,26 @@ export function useWebRTC() {
             } catch (err) {}
           }
 
+          if (!pc || pc.signalingState === 'closed') {
+            pc = createPeerConnection(sid);
+          }
+
           if (stream && pc) {
             const senders = pc.getSenders();
             stream.getTracks().forEach((track) => {
               const alreadyAdded = senders.some((s) => s.track && s.track.id === track.id);
               if (!alreadyAdded) {
+                const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
+                const emptyTransceiver = transceivers.find(
+                  (t) => t.sender && !t.sender.track && t.receiver?.track?.kind === track.kind
+                );
+                if (emptyTransceiver) {
+                  try {
+                    emptyTransceiver.sender.replaceTrack(track);
+                    emptyTransceiver.direction = 'sendrecv';
+                    return;
+                  } catch (e) {}
+                }
                 try { pc.addTrack(track, stream); } catch (e) {}
               }
             });
@@ -709,6 +757,8 @@ export function useWebRTC() {
     initLocalStream,
     localStream,
     remoteStream,
+    localStreamRef,
+    remoteStreamRef,
     hasRemoteVideo,
     setHasRemoteVideo,
     hasLocalVideo,

@@ -76,6 +76,8 @@ export function QueuePage() {
     setHasLocalVideo,
     localStream,
     remoteStream,
+    localStreamRef,
+    remoteStreamRef,
     messages,
     isPartnerTyping,
     sendMessage,
@@ -88,7 +90,7 @@ export function QueuePage() {
 
   const [selectedLanguage, setSelectedLanguage] = useState('English');
   const [selectedCallMode, setSelectedCallMode] = useState('VIDEO'); // 'VIDEO' | 'AUDIO'
-  const [cameraConsent, setCameraConsent] = useState(false);
+  const [cameraConsent, setCameraConsent] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -210,7 +212,16 @@ export function QueuePage() {
               {/* Partner's Camera Pane */}
               <div className="relative w-full h-full min-h-[260px] sm:min-h-[380px] bg-slate-900/90 rounded-3xl overflow-hidden border-2 border-indigo-500/40 shadow-2xl flex items-center justify-center group">
                 <video
-                  ref={remoteVideoRef}
+                  ref={(el) => {
+                    remoteVideoRef.current = el;
+                    if (el) {
+                      const stream = remoteStreamRef?.current || remoteStream;
+                      if (stream && el.srcObject !== stream) {
+                        el.srcObject = stream;
+                      }
+                      el.play().catch(() => {});
+                    }
+                  }}
                   autoPlay
                   playsInline
                   onLoadedMetadata={(e) => e.target.play().catch(() => {})}
@@ -259,7 +270,16 @@ export function QueuePage() {
               {/* Your Camera Pane */}
               <div className="relative w-full h-full min-h-[260px] sm:min-h-[380px] bg-slate-900/90 rounded-3xl overflow-hidden border-2 border-purple-500/40 shadow-2xl flex items-center justify-center group">
                 <video
-                  ref={localVideoRef}
+                  ref={(el) => {
+                    localVideoRef.current = el;
+                    if (el) {
+                      const stream = localStreamRef?.current || localStream;
+                      if (stream && el.srcObject !== stream) {
+                        el.srcObject = stream;
+                      }
+                      el.play().catch(() => {});
+                    }
+                  }}
                   autoPlay
                   playsInline
                   muted
@@ -307,7 +327,16 @@ export function QueuePage() {
               <div className="relative w-full h-full flex items-center justify-center bg-black">
                 {mainVideoSource === 'remote' ? (
                   <video
-                    ref={remoteVideoRef}
+                    ref={(el) => {
+                      remoteVideoRef.current = el;
+                      if (el) {
+                        const stream = remoteStreamRef?.current || remoteStream;
+                        if (stream && el.srcObject !== stream) {
+                          el.srcObject = stream;
+                        }
+                        el.play().catch(() => {});
+                      }
+                    }}
                     autoPlay
                     playsInline
                     onLoadedMetadata={(e) => e.target.play().catch(() => {})}
@@ -317,7 +346,16 @@ export function QueuePage() {
                   />
                 ) : (
                   <video
-                    ref={localVideoRef}
+                    ref={(el) => {
+                      localVideoRef.current = el;
+                      if (el) {
+                        const stream = localStreamRef?.current || localStream;
+                        if (stream && el.srcObject !== stream) {
+                          el.srcObject = stream;
+                        }
+                        el.play().catch(() => {});
+                      }
+                    }}
                     autoPlay
                     playsInline
                     muted
@@ -345,7 +383,16 @@ export function QueuePage() {
                 {mainVideoSource === 'remote' ? (
                   <>
                     <video
-                      ref={localVideoRef}
+                      ref={(el) => {
+                        localVideoRef.current = el;
+                        if (el) {
+                          const stream = localStreamRef?.current || localStream;
+                          if (stream && el.srcObject !== stream) {
+                            el.srcObject = stream;
+                          }
+                          el.play().catch(() => {});
+                        }
+                      }}
                       autoPlay
                       playsInline
                       muted
@@ -367,7 +414,16 @@ export function QueuePage() {
                 ) : (
                   <>
                     <video
-                      ref={remoteVideoRef}
+                      ref={(el) => {
+                        remoteVideoRef.current = el;
+                        if (el) {
+                          const stream = remoteStreamRef?.current || remoteStream;
+                          if (stream && el.srcObject !== stream) {
+                            el.srcObject = stream;
+                          }
+                          el.play().catch(() => {});
+                        }
+                      }}
                       autoPlay
                       playsInline
                       onLoadedMetadata={(e) => e.target.play().catch(() => {})}
@@ -982,13 +1038,21 @@ export function QueuePage() {
                 <Button
                   variant="primary"
                   size="lg"
-                  disabled={!cameraConsent || (user?.gender !== 'FEMALE' && !freeCallInfo?.eligible && wallet.balancePaise < 700)}
-                  onClick={() => joinQueue([selectedLanguage], false, selectedCallMode, user?.gender === 'FEMALE' ? 'RECEIVE' : 'CALL')}
+                  disabled={!cameraConsent}
+                  onClick={() => {
+                    if (user?.gender !== 'FEMALE' && !freeCallInfo?.eligible && wallet.balancePaise < 700) {
+                      openWalletModal();
+                      return;
+                    }
+                    joinQueue([selectedLanguage], false, selectedCallMode, user?.gender === 'FEMALE' ? 'RECEIVE' : 'CALL');
+                  }}
                   className="w-full shadow-tomato py-3 font-bold"
                   icon={Sparkles}
                 >
                   {user?.gender === 'FEMALE'
                     ? 'Start Receiving Calls (100% Free • Zero Cost)'
+                    : wallet.balancePaise < 700 && !freeCallInfo?.eligible
+                    ? 'Recharge Wallet to Start Call (₹7.00/min)'
                     : `Start Random ${selectedCallMode === 'AUDIO' ? 'Voice' : 'Video'} Call (₹7.00/min)`}
                 </Button>
               </div>

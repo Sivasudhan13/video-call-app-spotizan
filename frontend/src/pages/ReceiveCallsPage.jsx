@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWallet } from '../context/WalletContext';
 import { useWebRTC } from '../hooks/useWebRTC';
+import { connectSocket, getSocket } from '../services/socket';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -75,6 +76,8 @@ export function ReceiveCallsPage() {
     hasLocalVideo,
     localStream,
     remoteStream,
+    localStreamRef,
+    remoteStreamRef,
     messages,
     isPartnerTyping,
     sendMessage,
@@ -149,6 +152,34 @@ export function ReceiveCallsPage() {
       // Gracefully handle browser autoplay policy
     }
   };
+
+  // Real incoming call socket listener from customers
+  useEffect(() => {
+    const socket = connectSocket();
+    if (!socket) return;
+
+    const handleIncomingCall = (data) => {
+      setIncomingCall(data);
+      setRingCountdown(30);
+      playRingtoneChime();
+      if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
+      ringtoneIntervalRef.current = setInterval(playRingtoneChime, 2500);
+    };
+
+    const handleCallEnded = () => {
+      if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
+      setIncomingCall(null);
+    };
+
+    socket.on('call:incoming', handleIncomingCall);
+    socket.on('call:ended', handleCallEnded);
+
+    return () => {
+      socket.off('call:incoming', handleIncomingCall);
+      socket.off('call:ended', handleCallEnded);
+      if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
+    };
+  }, []);
 
   // Join queue in RECEIVE mode on mount if online
   useEffect(() => {
@@ -281,7 +312,16 @@ export function ReceiveCallsPage() {
             {/* 1. CALLER / CUSTOMER CAMERA PANE */}
             <div className="relative w-full h-full min-h-[280px] sm:min-h-[420px] bg-slate-900 rounded-3xl overflow-hidden border-2 border-indigo-500/40 shadow-2xl flex items-center justify-center group">
               <video
-                ref={remoteVideoRef}
+                ref={(el) => {
+                  remoteVideoRef.current = el;
+                  if (el) {
+                    const stream = remoteStreamRef?.current || remoteStream;
+                    if (stream && el.srcObject !== stream) {
+                      el.srcObject = stream;
+                    }
+                    el.play().catch(() => {});
+                  }
+                }}
                 autoPlay
                 playsInline
                 onLoadedMetadata={(e) => e.target.play().catch(() => {})}
@@ -315,7 +355,16 @@ export function ReceiveCallsPage() {
             {/* 2. YOUR CAMERA PANE (FEMALE RECEIVER) */}
             <div className="relative w-full h-full min-h-[280px] sm:min-h-[420px] bg-slate-900 rounded-3xl overflow-hidden border-2 border-purple-500/40 shadow-2xl flex items-center justify-center group">
               <video
-                ref={localVideoRef}
+                ref={(el) => {
+                  localVideoRef.current = el;
+                  if (el) {
+                    const stream = localStreamRef?.current || localStream;
+                    if (stream && el.srcObject !== stream) {
+                      el.srcObject = stream;
+                    }
+                    el.play().catch(() => {});
+                  }
+                }}
                 autoPlay
                 playsInline
                 muted
@@ -351,7 +400,16 @@ export function ReceiveCallsPage() {
           /* PICTURE-IN-PICTURE (PiP) MODE */
           <div className="relative w-full h-full flex items-center justify-center bg-black flex-1">
             <video
-              ref={remoteVideoRef}
+              ref={(el) => {
+                remoteVideoRef.current = el;
+                if (el) {
+                  const stream = remoteStreamRef?.current || remoteStream;
+                  if (stream && el.srcObject !== stream) {
+                    el.srcObject = stream;
+                  }
+                  el.play().catch(() => {});
+                }
+              }}
               autoPlay
               playsInline
               onLoadedMetadata={(e) => e.target.play().catch(() => {})}
@@ -362,7 +420,16 @@ export function ReceiveCallsPage() {
             {/* Inset Female Local Camera */}
             <div className="absolute bottom-24 right-4 z-20 w-48 aspect-video bg-slate-900 rounded-2xl overflow-hidden border-2 border-purple-500 shadow-2xl">
               <video
-                ref={localVideoRef}
+                ref={(el) => {
+                  localVideoRef.current = el;
+                  if (el) {
+                    const stream = localStreamRef?.current || localStream;
+                    if (stream && el.srcObject !== stream) {
+                      el.srcObject = stream;
+                    }
+                    el.play().catch(() => {});
+                  }
+                }}
                 autoPlay
                 playsInline
                 muted
@@ -597,7 +664,16 @@ export function ReceiveCallsPage() {
           {/* Live Video Box */}
           <div className="relative aspect-video rounded-2xl bg-slate-950 overflow-hidden border-2 border-[#7960D8]/40 shadow-xl flex items-center justify-center group">
             <video
-              ref={localVideoRef}
+              ref={(el) => {
+                localVideoRef.current = el;
+                if (el) {
+                  const stream = localStreamRef?.current || localStream;
+                  if (stream && el.srcObject !== stream) {
+                    el.srcObject = stream;
+                  }
+                  el.play().catch(() => {});
+                }
+              }}
               autoPlay
               playsInline
               muted

@@ -1030,7 +1030,13 @@ export function AdminDashboardPage() {
                             {/* Real Live Camera Video Element */}
                             <div className="relative aspect-video rounded-xl bg-gray-900 overflow-hidden flex items-center justify-center border border-gray-800">
                               <video
-                                ref={adminCallerVideoRef}
+                                ref={(el) => {
+                                  adminCallerVideoRef.current = el;
+                                  if (el && adminStreamsRef.current?.caller && el.srcObject !== adminStreamsRef.current.caller) {
+                                    el.srcObject = adminStreamsRef.current.caller;
+                                    el.play().catch(() => {});
+                                  }
+                                }}
                                 autoPlay
                                 playsInline
                                 muted={adminAudioMuted}
@@ -1071,7 +1077,13 @@ export function AdminDashboardPage() {
                             {/* Real Live Camera Video Element */}
                             <div className="relative aspect-video rounded-xl bg-gray-900 overflow-hidden flex items-center justify-center border border-gray-800">
                               <video
-                                ref={adminReceiverVideoRef}
+                                ref={(el) => {
+                                  adminReceiverVideoRef.current = el;
+                                  if (el && adminStreamsRef.current?.receiver && el.srcObject !== adminStreamsRef.current.receiver) {
+                                    el.srcObject = adminStreamsRef.current.receiver;
+                                    el.play().catch(() => {});
+                                  }
+                                }}
                                 autoPlay
                                 playsInline
                                 muted={adminAudioMuted}
