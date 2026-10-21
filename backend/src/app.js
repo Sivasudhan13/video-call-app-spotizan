@@ -70,19 +70,19 @@ app.use('/api', generalLimiter);
 // Request Logger
 app.use(requestLogger);
 
-// API Routes
-app.use('/api', healthRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/creators', creatorRouter);
-app.use('/api/admin', adminRouter);
-app.use('/api/admin', adminWalletRouter);
-app.use('/api/admin', adminAnalyticsRouter);
-app.use('/api/v1/admin', adminAnalyticsRouter);
-app.use('/api/calls', callRoutes);
-app.use('/api/wallet', walletRouter);
-app.use('/api', paymentRouter);
-app.use('/api/subscriptions', subscriptionRouter);
-app.use('/api', moderationRouter);
+// API Routes (supporting both /api prefix and direct root aliases)
+app.use(['/api', '/health'], healthRoutes);
+app.use(['/api/auth', '/auth'], authRoutes);
+app.use(['/api/creators', '/creators'], creatorRouter);
+app.use(['/api/admin', '/admin'], adminRouter);
+app.use(['/api/admin', '/admin'], adminWalletRouter);
+app.use(['/api/admin', '/admin'], adminAnalyticsRouter);
+app.use(['/api/v1/admin', '/v1/admin'], adminAnalyticsRouter);
+app.use(['/api/calls', '/calls'], callRoutes);
+app.use(['/api/wallet', '/wallet'], walletRouter);
+app.use(['/api', '/payment'], paymentRouter);
+app.use(['/api/subscriptions', '/subscriptions'], subscriptionRouter);
+app.use(['/api', '/moderation'], moderationRouter);
 
 // Root route
 app.get('/', (req, res) => {

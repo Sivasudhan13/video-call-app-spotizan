@@ -2,10 +2,14 @@
  * Unified API Client for Spotizan Frontend
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const rawApiUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
+const API_BASE_URL = (rawApiUrl.startsWith('http') && !rawApiUrl.endsWith('/api'))
+  ? `${rawApiUrl}/api`
+  : rawApiUrl;
 
 export async function apiRequest(endpoint, options = {}) {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${cleanEndpoint}`;
   
   const token = typeof window !== 'undefined' ? localStorage.getItem('spotizan_token') : null;
 
