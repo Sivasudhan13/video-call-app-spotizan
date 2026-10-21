@@ -83,4 +83,15 @@ describe('Spotizan Frontend App - Phase 3 Creator Discovery & Profiles', () => {
     expect(screen.getAllByText(/Random Queue/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Pricing & Rates/i).length).toBeGreaterThan(0);
   });
+
+  it('renders admin console security gateway on /admin/login', async () => {
+    window.localStorage.setItem('spotizan_age_consent', 'true');
+    window.history.pushState({}, 'Admin Login', '/admin/login');
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    expect(screen.getAllByText(/Staff Moderation Console|Authenticate as Administrator/i).length).toBeGreaterThan(0);
+  });
 });
