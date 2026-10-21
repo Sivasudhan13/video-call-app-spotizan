@@ -37,6 +37,7 @@ import {
   Maximize2,
   VolumeX,
   Volume2,
+  Sparkles,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { connectSocket, getSocket } from '../services/socket';
