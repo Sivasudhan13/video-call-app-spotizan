@@ -29,7 +29,7 @@ export function setAuthCookie(res, token) {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     secure: isProduction, // HTTPS in production
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: isProduction ? 'none' : 'lax', // Required for cross-domain (Vercel -> Render)
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/',
   });
@@ -44,7 +44,7 @@ export function clearAuthCookie(res) {
   res.cookie(COOKIE_NAME, '', {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: isProduction ? 'none' : 'lax',
     expires: new Date(0),
     path: '/',
   });

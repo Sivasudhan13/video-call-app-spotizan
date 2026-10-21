@@ -30,6 +30,9 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
     if (res.success && res.data?.user) {
+      if (res.data?.token) {
+        localStorage.setItem('spotizan_token', res.data.token);
+      }
       setUser(res.data.user);
       return res.data.user;
     }
@@ -39,6 +42,9 @@ export function AuthProvider({ children }) {
   const register = async (userData) => {
     const res = await api.post('/auth/register', userData);
     if (res.success && res.data?.user) {
+      if (res.data?.token) {
+        localStorage.setItem('spotizan_token', res.data.token);
+      }
       setUser(res.data.user);
       return res.data.user;
     }
@@ -49,6 +55,7 @@ export function AuthProvider({ children }) {
     try {
       await api.post('/auth/logout', {});
     } finally {
+      localStorage.removeItem('spotizan_token');
       setUser(null);
     }
   };

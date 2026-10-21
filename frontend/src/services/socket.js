@@ -4,9 +4,16 @@ let socketInstance = null;
 
 export function getSocket() {
   if (!socketInstance) {
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+    const defaultUrl =
+      typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:5000'
+        : (import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, '') || window.location.origin);
+
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || defaultUrl;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('spotizan_token') : null;
 
     socketInstance = io(socketUrl, {
+      auth: { token },
       withCredentials: true,
       transports: ['websocket', 'polling'],
       autoConnect: false,

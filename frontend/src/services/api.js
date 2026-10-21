@@ -7,8 +7,11 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 export async function apiRequest(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
   
+  const token = typeof window !== 'undefined' ? localStorage.getItem('spotizan_token') : null;
+
   const headers = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   };
 

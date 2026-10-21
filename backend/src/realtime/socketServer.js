@@ -19,7 +19,7 @@ export function initializeSocketServer(httpServer) {
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, callback) => {
-        if (!origin || origin === env.CLIENT_URL || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        if (!origin || origin === env.CLIENT_URL || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.endsWith('.vercel.app')) {
           callback(null, true);
         } else {
           callback(new Error(`Socket CORS blocked origin: ${origin}`));

@@ -28,7 +28,13 @@ app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g. mobile apps, curl, or same-origin in development)
-      if (!origin || origin === env.CLIENT_URL || origin === 'http://localhost:5173' || origin === 'http://127.0.0.1:5173') {
+      if (
+        !origin ||
+        origin === env.CLIENT_URL ||
+        origin === 'http://localhost:5173' ||
+        origin === 'http://127.0.0.1:5173' ||
+        origin.endsWith('.vercel.app')
+      ) {
         callback(null, true);
       } else {
         callback(new Error(`CORS blocked request from origin: ${origin}`));
