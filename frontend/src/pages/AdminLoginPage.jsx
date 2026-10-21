@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
@@ -104,8 +104,50 @@ export function AdminLoginPage() {
             >
               Authenticate as Administrator
             </Button>
+
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-[#E8E4F0]"></div>
+              <span className="flex-shrink mx-3 text-[11px] text-[#777387] uppercase font-semibold">Demo Quick Access</span>
+              <div className="flex-grow border-t border-[#E8E4F0]"></div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isLoading}
+              onClick={async () => {
+                setFormData({ email: 'admin@spotizan.com', password: 'Admin@Spotizan123!' });
+                setIsLoading(true);
+                setError(null);
+                try {
+                  const user = await login('admin@spotizan.com', 'Admin@Spotizan123!');
+                  if (user.role !== 'ADMIN') {
+                    setError('Access Denied: You do not possess platform administrator privileges.');
+                    return;
+                  }
+                  navigate('/admin/dashboard');
+                } catch (err) {
+                  setError(err.message || 'Demo admin credentials failed to authenticate.');
+                } finally {
+                  setIsLoading(false);
+                }
+              }}
+              className="w-full py-2.5 font-bold border-[#7960D8] text-[#7960D8] hover:bg-[#F1EDFF]"
+              icon={ShieldCheck}
+            >
+              1-Click Instant Demo Admin Login
+            </Button>
           </form>
         </Card>
+
+        <div className="text-center">
+          <Link
+            to="/"
+            className="text-xs text-[#7960D8] hover:underline font-semibold inline-flex items-center gap-1.5"
+          >
+            ← Return to Spotizan Main Site
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -38,6 +38,7 @@ export function Footer() {
               <li><a href="/premium" className="hover:text-[#7960D8] transition-colors">Premium Plans</a></li>
               <li><a href="/pricing" className="hover:text-[#7960D8] transition-colors">Wallet & Top Up (INR)</a></li>
               <li><a href="/register" className="hover:text-[#7960D8] transition-colors">Creator Onboarding</a></li>
+              <li><a href="/admin" className="text-[#7960D8] hover:underline font-bold flex items-center gap-1">🛡️ Admin Console</a></li>
             </ul>
           </div>
 
@@ -75,7 +76,7 @@ export function Footer() {
 
         {/* Bottom bar */}
         <div className="pt-6 border-t border-[#E8E4F0] flex flex-col sm:flex-row items-center justify-between gap-4 text-[#777387] text-xs">
-          <p>© {new Date().getFullYear()} Spotizan Platform Inc. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Spotizan Platform Inc. All rights reserved. • <a href="/admin" className="text-[#7960D8] hover:underline font-semibold">Staff Admin Console</a></p>
           <p className="flex items-center gap-1.5 font-medium">
             <HeartHandshake className="w-4 h-4 text-[#7960D8]" />
             <span>Fair 70% Creator Revenue Share • Transparent Per-Minute Billing</span>

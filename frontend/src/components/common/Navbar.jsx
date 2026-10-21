@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Video, Sparkles, Menu, X, LogOut, User as UserIcon, Wallet, Plus, Coins } from 'lucide-react';
+import { Video, Sparkles, Menu, X, LogOut, User as UserIcon, Wallet, Plus, Coins, Shield } from 'lucide-react';
 import { Button } from './Button';
 import { Badge } from './Badge';
 import { api } from '../../services/api';
@@ -48,7 +48,7 @@ export function Navbar() {
         ]
       : []),
     ...(user?.role === 'CREATOR' && !isFemale ? [{ name: 'Creator Studio', href: '/creator/dashboard' }] : []),
-    ...(user?.role === 'ADMIN' ? [{ name: 'Admin Console', href: '/admin' }] : []),
+    ...(user?.role === 'ADMIN' ? [{ name: 'Admin Console', href: '/admin', isAdmin: true }] : []),
   ];
 
   const isActive = (path) => location.pathname === path;
@@ -87,12 +87,15 @@ export function Navbar() {
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
                   isActive(link.href)
                     ? 'text-[#7960D8] bg-[#F1EDFF] font-semibold'
+                    : link.isAdmin
+                    ? 'text-white bg-[#7960D8] hover:bg-[#684fc9] font-bold shadow-sm'
                     : link.isHighlight
                     ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-bold border border-emerald-200 shadow-sm'
                     : 'text-[#777387] hover:text-[#27243A] hover:bg-[#F1EDFF]'
                 }`}
               >
                 {link.isHighlight && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
+                {link.isAdmin && <Shield className="w-3.5 h-3.5" />}
                 {link.name}
               </Link>
             ))}
@@ -156,6 +159,19 @@ export function Navbar() {
                       <Plus className="w-3 h-3" />
                     </div>
                   </button>
+                )}
+
+                {user?.role === 'ADMIN' && (
+                  <Link to="/admin">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="bg-[#7960D8] hover:bg-[#684fc9] text-white font-bold shadow-sm"
+                      icon={Shield}
+                    >
+                      Admin Console
+                    </Button>
+                  </Link>
                 )}
 
                 <Link
@@ -245,6 +261,16 @@ export function Navbar() {
           <div className="pt-4 border-t border-[#E8E4F0] flex flex-col gap-2">
             {isAuthenticated ? (
               <div className="space-y-2">
+                {user?.role === 'ADMIN' && (
+                  <Link
+                    to="/admin"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-center gap-2 p-2.5 bg-[#7960D8] text-white rounded-xl font-bold text-sm shadow-sm"
+                  >
+                    <Shield className="w-4 h-4" />
+                    Admin Operations Console
+                  </Link>
+                )}
                 <Link
                   to="/profile"
                   onClick={() => setMobileMenuOpen(false)}

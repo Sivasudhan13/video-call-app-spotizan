@@ -436,7 +436,7 @@ export function AdminDashboardPage() {
       setSuccessMsg(`Payout marked as ${status}.`);
       setPayouts((prev) =>
         prev.map((p) =>
-          p._id === payoutId
+          (p._id === payoutId || p.payoutId === payoutId)
             ? { ...p, status, transactionReference: status === 'PROCESSED' ? transactionReference : p.transactionReference }
             : p
         )
