@@ -57,6 +57,9 @@ export const payoutRequestSchema = z
       accountHolderName: z.string().optional(),
       bankAccountNumber: z.string().optional(),
       ifscCode: z.string().optional(),
+      bankName: z.string().optional(),
+      phoneNumber: z.string().optional(),
+      aadhaarNumber: z.string().optional(),
     }),
   })
   .refine(

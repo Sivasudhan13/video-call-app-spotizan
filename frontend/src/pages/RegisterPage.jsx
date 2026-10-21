@@ -19,6 +19,8 @@ export function RegisterPage() {
     dateOfBirth: '',
     gender: 'MALE', // 'MALE' | 'FEMALE'
     genderPreference: 'ANY', // 'ANY' | 'FEMALE' | 'MALE'
+    phoneNumber: '',
+    aadhaarNumber: '',
     wantToBeCreator: false,
     ageAffirmation: false,
   });
@@ -96,6 +98,8 @@ export function RegisterPage() {
         password: formData.password,
         gender: formData.gender,
         genderPreference: formData.genderPreference,
+        phoneNumber: formData.phoneNumber,
+        aadhaarNumber: formData.aadhaarNumber,
         role: finalRole,
         dateOfBirth: formData.dateOfBirth,
         ageAffirmation: formData.ageAffirmation,
@@ -305,6 +309,40 @@ export function RegisterPage() {
                 onChange={handleDateChange}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#E8E4F0] text-[#27243A] text-xs focus:outline-none focus:border-[#7960D8] transition-colors"
               />
+            </div>
+
+            {/* Phone Number & Aadhaar Number (UIDAI) Verification Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#27243A] mb-1.5">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, phoneNumber: e.target.value }))
+                  }
+                  placeholder="+91 98765 43210"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#E8E4F0] text-[#27243A] placeholder-[#777387]/60 text-xs focus:outline-none focus:border-[#7960D8] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#27243A] mb-1.5">
+                  Aadhaar Number (12-Digit)
+                </label>
+                <input
+                  type="text"
+                  maxLength={16}
+                  value={formData.aadhaarNumber}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, aadhaarNumber: e.target.value }))
+                  }
+                  placeholder="XXXX XXXX 1234"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#E8E4F0] text-[#27243A] placeholder-[#777387]/60 text-xs focus:outline-none focus:border-[#7960D8] transition-colors"
+                />
+              </div>
             </div>
 
             {/* Matching Preference Selection */}

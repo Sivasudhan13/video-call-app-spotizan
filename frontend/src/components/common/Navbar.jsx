@@ -34,7 +34,7 @@ export function Navbar() {
     { name: 'Random Queue', href: '/queue' },
     { name: 'Premium', href: '/premium' },
     { name: 'Pricing & Rates', href: '/pricing' },
-    ...(user?.gender === 'FEMALE' || user?.role === 'CREATOR'
+    ...(user?.gender === 'FEMALE'
       ? [{ name: 'Receive Calls (Free)', href: '/receive-calls', isHighlight: true }]
       : []),
     ...(user?.role === 'CREATOR' && user?.gender !== 'MALE' ? [{ name: 'Creator Studio', href: '/creator/dashboard' }] : []),

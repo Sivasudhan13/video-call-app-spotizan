@@ -55,6 +55,8 @@ export async function register(req, res, next) {
       password,
       gender,
       genderPreference: req.body.genderPreference || 'ANY',
+      phoneNumber: validatedData.phoneNumber || req.body.phoneNumber || '',
+      aadhaarNumber: validatedData.aadhaarNumber || req.body.aadhaarNumber || '',
       role: role || 'CUSTOMER',
       dateOfBirth: new Date(dateOfBirth),
       isAdult: true,
@@ -110,6 +112,8 @@ export async function register(req, res, next) {
       email: user.email,
       role: user.role,
       gender: user.gender,
+      phoneNumber: user.phoneNumber,
+      aadhaarNumber: user.aadhaarNumber,
       isAdult: user.isAdult,
       status: user.status,
       avatarUrl: user.avatarUrl,
@@ -221,6 +225,9 @@ export function getMe(req, res) {
         role: req.user.role,
         gender: req.user.gender,
         genderPreference: req.user.genderPreference || 'ANY',
+        phoneNumber: req.user.phoneNumber || '',
+        aadhaarNumber: req.user.aadhaarNumber || '',
+        bankDetails: req.user.bankDetails || {},
         isAdult: req.user.isAdult,
         status: req.user.status,
         avatarUrl: req.user.avatarUrl,
@@ -237,7 +244,7 @@ export function getMe(req, res) {
  */
 export async function updateProfile(req, res, next) {
   try {
-    const { displayName, bio, languages, genderPreference, avatarUrl } = req.body;
+    const { displayName, bio, languages, genderPreference, avatarUrl, phoneNumber, aadhaarNumber, bankDetails } = req.body;
     const allowedFields = {};
     if (displayName && typeof displayName === 'string') {
       allowedFields.displayName = displayName.trim().slice(0, 40);
@@ -253,6 +260,21 @@ export async function updateProfile(req, res, next) {
     }
     if (typeof avatarUrl === 'string') {
       allowedFields.avatarUrl = avatarUrl.trim();
+    }
+    if (typeof phoneNumber === 'string') {
+      allowedFields.phoneNumber = phoneNumber.trim().slice(0, 15);
+    }
+    if (typeof aadhaarNumber === 'string') {
+      allowedFields.aadhaarNumber = aadhaarNumber.trim().slice(0, 20);
+    }
+    if (bankDetails && typeof bankDetails === 'object') {
+      allowedFields.bankDetails = {
+        accountHolderName: String(bankDetails.accountHolderName || '').trim(),
+        accountNumber: String(bankDetails.accountNumber || '').trim(),
+        ifscCode: String(bankDetails.ifscCode || '').trim().toUpperCase(),
+        bankName: String(bankDetails.bankName || '').trim(),
+        upiId: String(bankDetails.upiId || '').trim(),
+      };
     }
 
     const updatedUser = await User.findByIdAndUpdate(
@@ -272,6 +294,9 @@ export async function updateProfile(req, res, next) {
           role: updatedUser.role,
           gender: updatedUser.gender,
           genderPreference: updatedUser.genderPreference || 'ANY',
+          phoneNumber: updatedUser.phoneNumber || '',
+          aadhaarNumber: updatedUser.aadhaarNumber || '',
+          bankDetails: updatedUser.bankDetails || {},
           isAdult: updatedUser.isAdult,
           status: updatedUser.status,
           avatarUrl: updatedUser.avatarUrl,

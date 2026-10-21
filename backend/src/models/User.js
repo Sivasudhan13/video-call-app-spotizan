@@ -120,6 +120,25 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    phoneNumber: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true,
+    },
+    aadhaarNumber: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true,
+    },
+    bankDetails: {
+      accountHolderName: { type: String, default: '', trim: true },
+      accountNumber: { type: String, default: '', trim: true },
+      ifscCode: { type: String, default: '', trim: true, uppercase: true },
+      bankName: { type: String, default: '', trim: true },
+      upiId: { type: String, default: '', trim: true },
+    },
   },
   {
     timestamps: true,

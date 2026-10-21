@@ -102,6 +102,8 @@ export async function getAdminUsers(req, res, next) {
       query.$or = [
         { displayName: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
+        { phoneNumber: { $regex: search, $options: 'i' } },
+        { aadhaarNumber: { $regex: search, $options: 'i' } },
       ];
     }
     if (role) query.role = role;

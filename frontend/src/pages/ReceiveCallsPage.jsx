@@ -37,6 +37,13 @@ export function ReceiveCallsPage() {
   const { user } = useAuth();
   const { wallet } = useWallet();
 
+  // Strictly restrict call receiving station to verified female users
+  useEffect(() => {
+    if (user && user.gender !== 'FEMALE') {
+      navigate('/queue', { replace: true });
+    }
+  }, [user, navigate]);
+
   // Local camera preview ref & stream
   const previewVideoRef = useRef(null);
   const previewStreamRef = useRef(null);
@@ -130,6 +137,14 @@ export function ReceiveCallsPage() {
     };
   }, []);
 
+  // Ensure preview video element always attaches stream
+  useEffect(() => {
+    if (previewVideoRef.current && previewStreamRef.current) {
+      previewVideoRef.current.srcObject = previewStreamRef.current;
+      previewVideoRef.current.play().catch(() => {});
+    }
+  }, [cameraActive]);
+
   // Socket connection to listen for incoming calls and queue matches
   useEffect(() => {
     const socket = connectSocket();
@@ -157,7 +172,7 @@ export function ReceiveCallsPage() {
       // Immediately stop preview stream so queue page can claim camera
       stopCameraPreview();
       if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
-      navigate('/queue');
+      navigate('/queue?mode=receive&autoJoin=true');
     };
 
     socket.on('call:incoming', handleIncomingCall);
@@ -193,7 +208,7 @@ export function ReceiveCallsPage() {
     if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
     stopCameraPreview();
     // Navigate to queue calling screen with both cameras clear
-    navigate('/queue');
+    navigate('/queue?mode=receive&autoJoin=true');
   };
 
   const handleDeclineCall = () => {

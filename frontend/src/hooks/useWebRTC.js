@@ -27,6 +27,11 @@ export function useWebRTC() {
   const [isLocalMirrored, setIsLocalMirrored] = useState(true);
   const [isFreeForReceiver, setIsFreeForReceiver] = useState(false);
 
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
+  const [hasLocalVideo, setHasLocalVideo] = useState(false);
+
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
 
@@ -78,8 +83,11 @@ export function useWebRTC() {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
       localStreamRef.current = stream;
+      setLocalStream(stream);
+      setHasLocalVideo(true);
       if (localVideoRef.current && mode === 'VIDEO') {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
       }
       return stream;
     } catch (err) {
@@ -116,10 +124,19 @@ export function useWebRTC() {
     // Handle remote track
     pc.ontrack = (event) => {
       if (event.streams && event.streams[0]) {
-        remoteStreamRef.current = event.streams[0];
+        const stream = event.streams[0];
+        remoteStreamRef.current = stream;
+        setRemoteStream(stream);
+        setHasRemoteVideo(true);
         if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.srcObject = stream;
+          remoteVideoRef.current.play().catch(() => {});
         }
+        stream.getVideoTracks().forEach((track) => {
+          track.onunmute = () => setHasRemoteVideo(true);
+          track.onmute = () => setHasRemoteVideo(false);
+          track.onended = () => setHasRemoteVideo(false);
+        });
       }
     };
 
@@ -476,6 +493,25 @@ export function useWebRTC() {
     };
   }, [status]);
 
+  // Continuously ensure mounted video elements are bound to streams without delay
+  useEffect(() => {
+    if (localVideoRef.current && localStreamRef.current) {
+      if (localVideoRef.current.srcObject !== localStreamRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+      localVideoRef.current.play().catch(() => {});
+    }
+  });
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStreamRef.current) {
+      if (remoteVideoRef.current.srcObject !== remoteStreamRef.current) {
+        remoteVideoRef.current.srcObject = remoteStreamRef.current;
+      }
+      remoteVideoRef.current.play().catch(() => {});
+    }
+  });
+
   // Teardown streams on unmount
   useEffect(() => {
     return () => {
@@ -528,6 +564,10 @@ export function useWebRTC() {
     toggleMirror,
     isFreeForReceiver,
     initLocalStream,
+    localStream,
+    remoteStream,
+    hasRemoteVideo,
+    hasLocalVideo,
     // Chat & Moderation
     messages,
     isPartnerTyping,

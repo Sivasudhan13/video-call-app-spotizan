@@ -166,7 +166,7 @@ export async function adminGetPayoutRequests(req, res, next) {
     const skip = (Math.max(1, Number(page)) - 1) * Number(limit);
     const [payouts, totalCount] = await Promise.all([
       PayoutRequest.find(query)
-        .populate('creatorId', 'displayName email')
+        .populate('creatorId', 'displayName email phoneNumber aadhaarNumber bankDetails')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit)),
@@ -192,8 +192,15 @@ export async function adminProcessPayout(req, res, next) {
     const { payoutId } = req.params;
     const validated = adminUpdatePayoutSchema.parse(req.body);
 
+    // Support both string payoutId and MongoDB ObjectId
+    let targetPayoutId = payoutId;
+    if (!payoutId.startsWith('payout_')) {
+      const doc = await PayoutRequest.findById(payoutId);
+      if (doc?.payoutId) targetPayoutId = doc.payoutId;
+    }
+
     const updatedPayout = await WalletService.processPayoutByAdmin({
-      payoutId,
+      payoutId: targetPayoutId,
       status: validated.status,
       transactionReference: validated.transactionReference,
       adminNotes: validated.adminNotes,

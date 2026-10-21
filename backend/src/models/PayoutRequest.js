@@ -46,6 +46,18 @@ const payoutRequestSchema = new mongoose.Schema(
         trim: true,
         uppercase: true,
       },
+      bankName: {
+        type: String,
+        trim: true,
+      },
+      phoneNumber: {
+        type: String,
+        trim: true,
+      },
+      aadhaarNumber: {
+        type: String,
+        trim: true,
+      },
     },
     status: {
       type: String,

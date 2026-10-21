@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
@@ -69,6 +70,10 @@ export function QueuePage() {
     mainVideoSource,
     swapVideos,
     isFreeForReceiver,
+    hasRemoteVideo,
+    hasLocalVideo,
+    localStream,
+    remoteStream,
     messages,
     isPartnerTyping,
     sendMessage,
@@ -76,6 +81,8 @@ export function QueuePage() {
     blockPartner,
     reportPartner,
   } = useWebRTC();
+
+  const [searchParams] = useSearchParams();
 
   const [selectedLanguage, setSelectedLanguage] = useState('English');
   const [selectedCallMode, setSelectedCallMode] = useState('VIDEO'); // 'VIDEO' | 'AUDIO'
@@ -87,9 +94,16 @@ export function QueuePage() {
   const [reportDetails, setReportDetails] = useState('');
   const [reportSuccess, setReportSuccess] = useState(false);
 
-  // 6-Hour Free Call State
   const [freeCallInfo, setFreeCallInfo] = useState(null);
   const [countdownText, setCountdownText] = useState('');
+
+  // Handle auto-join from URL parameter (e.g. from /receive-calls or direct call acceptance)
+  useEffect(() => {
+    if (searchParams.get('autoJoin') === 'true' || searchParams.get('mode') === 'receive') {
+      const mode = user?.gender === 'FEMALE' ? 'RECEIVE' : 'CALL';
+      joinQueue(['English', 'Hindi'], false, 'VIDEO', mode);
+    }
+  }, [searchParams, user]);
 
   // Fetch free call eligibility & handle live countdown
   useEffect(() => {
@@ -178,16 +192,19 @@ export function QueuePage() {
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
+                  onLoadedMetadata={(e) => e.target.play().catch(() => {})}
                   className={`w-full h-full ${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
                 />
-                {/* Fallback if remote video hasn't rendered tracks yet */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-none -z-0">
-                  <div className="w-20 h-20 rounded-2xl bg-indigo-950/90 border border-indigo-700/60 flex items-center justify-center text-3xl font-extrabold text-indigo-300 shadow-2xl mb-3">
-                    {partner?.displayName?.charAt(0).toUpperCase() || 'P'}
+                {/* Fallback only if remote video hasn't rendered tracks yet */}
+                {!hasRemoteVideo && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-none z-10">
+                    <div className="w-20 h-20 rounded-2xl bg-indigo-950/90 border border-indigo-700/60 flex items-center justify-center text-3xl font-extrabold text-indigo-300 shadow-2xl mb-3">
+                      {partner?.displayName?.charAt(0).toUpperCase() || 'P'}
+                    </div>
+                    <h3 className="text-base font-bold text-white">{partner?.displayName || 'Matched Adult Peer'}</h3>
+                    <p className="text-xs text-indigo-300 animate-pulse mt-1">Establishing encrypted WebRTC P2P stream...</p>
                   </div>
-                  <h3 className="text-base font-bold text-white">{partner?.displayName || 'Matched Adult Peer'}</h3>
-                  <p className="text-xs text-indigo-300 animate-pulse mt-1">Establishing encrypted WebRTC P2P stream...</p>
-                </div>
+                )}
 
                 {/* Partner Header Tag */}
                 <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20 pointer-events-none">
@@ -223,6 +240,7 @@ export function QueuePage() {
                   autoPlay
                   playsInline
                   muted
+                  onLoadedMetadata={(e) => e.target.play().catch(() => {})}
                   className={`w-full h-full ${isLocalMirrored ? 'scale-x-[-1] ' : ''}${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'} ${isVideoDisabled ? 'hidden' : ''}`}
                 />
                 {isVideoDisabled && (
@@ -269,6 +287,7 @@ export function QueuePage() {
                     ref={remoteVideoRef}
                     autoPlay
                     playsInline
+                    onLoadedMetadata={(e) => e.target.play().catch(() => {})}
                     className={`w-full h-full ${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
                   />
                 ) : (
@@ -277,19 +296,22 @@ export function QueuePage() {
                     autoPlay
                     playsInline
                     muted
+                    onLoadedMetadata={(e) => e.target.play().catch(() => {})}
                     className={`w-full h-full ${isLocalMirrored ? 'scale-x-[-1] ' : ''}${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'} ${isVideoDisabled ? 'hidden' : ''}`}
                   />
                 )}
-                {/* Fallback if remote video hasn't rendered tracks yet */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-none -z-0">
-                  <div className="w-24 h-24 rounded-3xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-3xl font-extrabold text-indigo-300 shadow-2xl mb-4">
-                    {partner?.displayName?.charAt(0).toUpperCase() || 'P'}
+                {/* Fallback only if remote video hasn't rendered tracks yet */}
+                {!hasRemoteVideo && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-none z-10">
+                    <div className="w-24 h-24 rounded-3xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-3xl font-extrabold text-indigo-300 shadow-2xl mb-4">
+                      {partner?.displayName?.charAt(0).toUpperCase() || 'P'}
+                    </div>
+                    <h3 className="text-xl font-bold text-white">{partner?.displayName || 'Matched Adult Peer'}</h3>
+                    <p className="text-xs text-indigo-300 animate-pulse mt-1">
+                      Establishing encrypted WebRTC P2P stream...
+                    </p>
                   </div>
-                  <h3 className="text-xl font-bold text-white">{partner?.displayName || 'Matched Adult Peer'}</h3>
-                  <p className="text-xs text-indigo-300 animate-pulse mt-1">
-                    Establishing encrypted WebRTC P2P stream...
-                  </p>
-                </div>
+                )}
               </div>
 
               {/* Local / Inset Video PiP */}
@@ -907,12 +929,14 @@ export function QueuePage() {
                 <Button
                   variant="primary"
                   size="lg"
-                  disabled={!cameraConsent || (!freeCallInfo?.eligible && wallet.balancePaise < 700)}
-                  onClick={() => joinQueue([selectedLanguage], false, selectedCallMode)}
+                  disabled={!cameraConsent || (user?.gender !== 'FEMALE' && !freeCallInfo?.eligible && wallet.balancePaise < 700)}
+                  onClick={() => joinQueue([selectedLanguage], false, selectedCallMode, user?.gender === 'FEMALE' ? 'RECEIVE' : 'CALL')}
                   className="w-full shadow-tomato py-3 font-bold"
                   icon={Sparkles}
                 >
-                  Start Random {selectedCallMode === 'AUDIO' ? 'Voice' : 'Video'} Call (₹7.00/min)
+                  {user?.gender === 'FEMALE'
+                    ? 'Start Receiving Calls (100% Free • Earn ₹4.90/min)'
+                    : `Start Random ${selectedCallMode === 'AUDIO' ? 'Voice' : 'Video'} Call (₹7.00/min)`}
                 </Button>
               </div>
             </Card>

@@ -1085,11 +1085,12 @@ export function AdminDashboardPage() {
                     <thead className="bg-[#F1EDFF] text-[#777387] uppercase text-[10px] font-bold">
                       <tr>
                         <th className="py-3 px-3 rounded-l-lg">User Identity</th>
-                        <th className="py-3 px-3">Role</th>
-                        <th className="py-3 px-3">Gender / Match Pref</th>
+                        <th className="py-3 px-3">Phone & Mobile</th>
+                        <th className="py-3 px-3">Aadhaar (UIDAI)</th>
+                        <th className="py-3 px-3">Role & Gender</th>
+                        <th className="py-3 px-3">Bank Details</th>
                         <th className="py-3 px-3">Age Verification</th>
                         <th className="py-3 px-3">Status</th>
-                        <th className="py-3 px-3">Registered Date</th>
                         <th className="py-3 px-3 rounded-r-lg text-right">Moderation Actions</th>
                       </tr>
                     </thead>
@@ -1108,13 +1109,42 @@ export function AdminDashboardPage() {
                             </div>
                           </td>
                           <td className="py-3.5 px-3">
-                            <Badge variant={u.role === 'ADMIN' ? 'adult' : u.role === 'CREATOR' ? 'brand' : 'default'}>
-                              {u.role}
-                            </Badge>
+                            {u.phoneNumber ? (
+                              <span className="font-mono font-bold text-xs text-[#27243A] flex items-center gap-1">
+                                <Smartphone className="w-3.5 h-3.5 text-[#7960D8]" />
+                                {u.phoneNumber}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs italic">Not Provided</span>
+                            )}
                           </td>
                           <td className="py-3.5 px-3">
-                            <div className="font-semibold text-[#27243A]">{u.gender || 'MALE'}</div>
-                            <div className="text-[10px] text-[#777387]">Pref: {u.genderPreference || 'ANY'}</div>
+                            {u.aadhaarNumber ? (
+                              <span className="font-mono font-bold text-xs text-[#7960D8] bg-[#F1EDFF] px-2 py-0.5 rounded border border-[#E8E4F0]">
+                                {u.aadhaarNumber}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs italic">Not Provided</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant={u.role === 'ADMIN' ? 'adult' : u.role === 'CREATOR' ? 'brand' : 'default'}>
+                                {u.role}
+                              </Badge>
+                              <span className="text-[11px] font-semibold text-[#777387]">({u.gender || 'MALE'})</span>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            {u.bankDetails?.accountNumber ? (
+                              <div className="text-[11px] space-y-0.5">
+                                <span className="font-bold text-[#27243A] block">{u.bankDetails.bankName || 'Bank'}</span>
+                                <span className="font-mono text-[#777387]">A/C: {u.bankDetails.accountNumber}</span>
+                                <span className="text-[10px] text-gray-400 block font-mono">IFSC: {u.bankDetails.ifscCode}</span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-xs italic">None</span>
+                            )}
                           </td>
                           <td className="py-3.5 px-3">
                             {u.isAdult ? (
@@ -1136,9 +1166,6 @@ export function AdminDashboardPage() {
                             >
                               {u.status}
                             </span>
-                          </td>
-                          <td className="py-3.5 px-3 text-[#777387]">
-                            {new Date(u.createdAt).toLocaleDateString()}
                           </td>
                           <td className="py-3.5 px-3 text-right">
                             {u.role !== 'ADMIN' && (
@@ -1223,10 +1250,18 @@ export function AdminDashboardPage() {
                           <Badge variant="warning">PENDING KYC REVIEW</Badge>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-[#F1EDFF] p-3 rounded-xl border border-[#E8E4F0]">
+                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-xs bg-[#F1EDFF] p-3 rounded-xl border border-[#E8E4F0]">
                           <div>
                             <span className="text-[#777387] block text-[10px]">ID Type:</span>
                             <span className="font-bold text-[#27243A]">{record.idType || 'GOVT_ID'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[#777387] block text-[10px]">Phone Number:</span>
+                            <span className="font-bold text-[#27243A]">{user.phoneNumber || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[#777387] block text-[10px]">Aadhaar (UIDAI):</span>
+                            <span className="font-bold text-[#7960D8]">{user.aadhaarNumber || 'N/A'}</span>
                           </div>
                           <div>
                             <span className="text-[#777387] block text-[10px]">Declared Age:</span>
@@ -1332,58 +1367,142 @@ export function AdminDashboardPage() {
 
           {/* TAB 6: PAYMENTS & PAYOUTS */}
           {activeTab === 'payouts' && (
-            <Card className="p-6 border-[#E8E4F0]">
-              <h2 className="text-lg font-bold text-[#27243A] mb-1">Creator Payout Processing</h2>
-              <p className="text-xs text-[#777387] mb-6">
-                Direct bank transfers and payouts for earned creator video call minutes.
-              </p>
+            <Card className="p-6 border-[#E8E4F0] space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-bold text-[#27243A]">Creator Payout Processing & Bank Settlements</h2>
+                  <p className="text-xs text-[#777387]">
+                    Review female creator bank details and Aadhaar, send amount, and approve or reject payout requests.
+                  </p>
+                </div>
+                <Badge variant="adult" className="text-xs bg-[#218A58] text-white border-none">
+                  Double-Entry Ledger Verified
+                </Badge>
+              </div>
 
               {payouts.length === 0 ? (
-                <div className="py-12 text-center text-[#777387] text-xs">
-                  No payout requests recorded.
+                <div className="py-16 text-center text-[#777387] space-y-2">
+                  <CreditCard className="w-10 h-10 mx-auto text-gray-300" />
+                  <div className="text-sm font-semibold text-[#27243A]">No Payout Requests in Queue</div>
+                  <div className="text-xs">All female creator withdrawals have been processed or settled.</div>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs text-[#27243A]">
                     <thead className="bg-[#F1EDFF] text-[#777387] uppercase text-[10px] font-bold">
                       <tr>
-                        <th className="py-2.5 px-3">Creator</th>
-                        <th className="py-2.5 px-3">Amount</th>
-                        <th className="py-2.5 px-3">Bank Details</th>
-                        <th className="py-2.5 px-3">Status</th>
-                        <th className="py-2.5 px-3 text-right">Action</th>
+                        <th className="py-3 px-3 rounded-l-lg">Female Creator</th>
+                        <th className="py-3 px-3">Phone & Aadhaar</th>
+                        <th className="py-3 px-3">Withdrawal Amount</th>
+                        <th className="py-3 px-3">Bank Account Details</th>
+                        <th className="py-3 px-3">Status</th>
+                        <th className="py-3 px-3">UTR / Txn Ref</th>
+                        <th className="py-3 px-3 rounded-r-lg text-right">Admin Decision</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E4F0]">
-                      {payouts.map((p) => (
-                        <tr key={p._id} className="hover:bg-[#F1EDFF]/40">
-                          <td className="py-3 px-3 font-bold">{p.creatorId?.displayName || 'Creator'}</td>
-                          <td className="py-3 px-3 font-mono font-bold text-[#218A58]">
-                            ₹{(p.amountPaise / 100).toFixed(2)}
-                          </td>
-                          <td className="py-3 px-3 text-[#777387]">
-                            {p.bankAccountMasked || p.upiId || 'Direct UPI'}
-                          </td>
-                          <td className="py-3 px-3">
-                            <Badge variant={p.status === 'PROCESSED' ? 'success' : 'warning'}>
-                              {p.status}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-3 text-right">
-                            {p.status === 'PENDING' && (
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                disabled={actionLoading}
-                                onClick={() => handleProcessPayout(p._id, 'PROCESSED')}
-                                className="bg-[#218A58] hover:bg-[#1a6e46]"
-                              >
-                                Mark Paid
-                              </Button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                      {payouts.map((p) => {
+                        const payoutKey = p.payoutId || p._id;
+                        const creator = p.creatorId || {};
+                        const phone = creator.phoneNumber || p.details?.phoneNumber || 'N/A';
+                        const aadhaar = creator.aadhaarNumber || p.details?.aadhaarNumber || 'N/A';
+                        const bankName = p.details?.bankName || creator.bankDetails?.bankName || 'Bank';
+                        const acNumber = p.details?.bankAccountNumber || creator.bankDetails?.accountNumber || 'N/A';
+                        const ifsc = p.details?.ifscCode || creator.bankDetails?.ifscCode || 'N/A';
+                        const holderName = p.details?.accountHolderName || creator.bankDetails?.accountHolderName || creator.displayName;
+                        const upi = p.details?.upiId || creator.bankDetails?.upiId || '';
+
+                        return (
+                          <tr key={p._id} className="hover:bg-[#F1EDFF]/40 transition-colors">
+                            <td className="py-3.5 px-3">
+                              <div className="font-bold text-[#27243A] text-sm flex items-center gap-1.5">
+                                <span>{creator.displayName || 'Female Creator'}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-pink-100 text-pink-700 font-bold">GIRL</span>
+                              </div>
+                              <div className="text-[11px] text-[#777387] font-mono">{creator.email || 'N/A'}</div>
+                              <div className="text-[10px] text-gray-400 font-mono">ID: {payoutKey}</div>
+                            </td>
+
+                            <td className="py-3.5 px-3 space-y-1">
+                              <div className="flex items-center gap-1 text-[11px] font-semibold text-[#27243A]">
+                                <Smartphone className="w-3.5 h-3.5 text-[#7960D8]" />
+                                <span>{phone}</span>
+                              </div>
+                              <div className="text-[10px] font-mono font-bold text-[#7960D8] bg-[#F1EDFF] px-2 py-0.5 rounded inline-block">
+                                UID: {aadhaar}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-3">
+                              <div className="font-mono font-black text-base text-[#218A58]">
+                                ₹{(p.amountPaise / 100).toFixed(2)}
+                              </div>
+                              <span className="text-[10px] text-[#777387]">{p.method}</span>
+                            </td>
+
+                            <td className="py-3.5 px-3">
+                              <div className="p-2.5 rounded-xl bg-[#F1EDFF]/60 border border-[#E8E4F0] space-y-1 text-[11px]">
+                                <div><strong className="text-[#27243A]">{holderName}</strong> ({bankName})</div>
+                                <div className="font-mono text-[#27243A] font-bold">A/C: {acNumber}</div>
+                                <div className="font-mono text-[#7960D8]">IFSC: {ifsc}</div>
+                                {upi && <div className="font-mono text-emerald-700 font-semibold">UPI: {upi}</div>}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-3">
+                              <Badge variant={p.status === 'PROCESSED' ? 'success' : p.status === 'REJECTED' ? 'danger' : 'warning'}>
+                                {p.status}
+                              </Badge>
+                              {p.transactionReference && (
+                                <div className="text-[10px] text-gray-500 font-mono mt-1">Ref: {p.transactionReference}</div>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-3">
+                              {p.status === 'PENDING' ? (
+                                <input
+                                  type="text"
+                                  placeholder="Enter Bank UTR..."
+                                  value={txnRefs[payoutKey] || ''}
+                                  onChange={(e) => setTxnRefs({ ...txnRefs, [payoutKey]: e.target.value })}
+                                  className="w-28 px-2 py-1 rounded-lg border border-[#E8E4F0] text-xs font-mono bg-white"
+                                />
+                              ) : (
+                                <span className="text-gray-400 font-mono text-[11px]">{p.transactionReference || 'N/A'}</span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-3 text-right">
+                              {p.status === 'PENDING' ? (
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
+                                    disabled={actionLoading}
+                                    onClick={() => handleProcessPayout(payoutKey, 'PROCESSED')}
+                                    className="bg-[#218A58] hover:bg-[#1a6e46] text-white shadow-sm font-bold"
+                                  >
+                                    Accept & Send Amount
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={actionLoading}
+                                    onClick={() => handleProcessPayout(payoutKey, 'REJECTED')}
+                                    className="border-rose-300 text-rose-700 hover:bg-rose-50"
+                                  >
+                                    Reject
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-gray-400 font-semibold">
+                                  {p.status === 'PROCESSED' ? 'Paid & Settled' : 'Rejected & Refunded'}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

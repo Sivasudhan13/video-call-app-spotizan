@@ -36,6 +36,15 @@ export function ProfilePage() {
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [genderPreference, setGenderPreference] = useState(user?.genderPreference || 'ANY');
+  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || '');
+  const [aadhaarNumber, setAadhaarNumber] = useState(user?.aadhaarNumber || '');
+  const [bankDetails, setBankDetails] = useState({
+    accountHolderName: user?.bankDetails?.accountHolderName || '',
+    accountNumber: user?.bankDetails?.accountNumber || '',
+    ifscCode: user?.bankDetails?.ifscCode || '',
+    bankName: user?.bankDetails?.bankName || '',
+    upiId: user?.bankDetails?.upiId || '',
+  });
   const [languages, setLanguages] = useState(
     Array.isArray(user?.languages) ? user.languages.join(', ') : 'English, Hindi'
   );
@@ -54,6 +63,15 @@ export function ProfilePage() {
       setDisplayName(user.displayName || '');
       setBio(user.bio || '');
       setGenderPreference(user.genderPreference || 'ANY');
+      setPhoneNumber(user.phoneNumber || '');
+      setAadhaarNumber(user.aadhaarNumber || '');
+      setBankDetails({
+        accountHolderName: user.bankDetails?.accountHolderName || '',
+        accountNumber: user.bankDetails?.accountNumber || '',
+        ifscCode: user.bankDetails?.ifscCode || '',
+        bankName: user.bankDetails?.bankName || '',
+        upiId: user.bankDetails?.upiId || '',
+      });
       setLanguages(
         Array.isArray(user.languages) ? user.languages.join(', ') : 'English, Hindi'
       );
@@ -114,10 +132,13 @@ export function ProfilePage() {
         displayName,
         bio,
         genderPreference,
+        phoneNumber,
+        aadhaarNumber,
+        bankDetails,
         languages: langsArray,
       });
 
-      setSuccessMsg('Your profile and matching preferences have been saved successfully!');
+      setSuccessMsg('Your profile, verification IDs, and bank details have been saved successfully!');
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       setErrorMsg(err.message || 'Failed to update profile settings.');
@@ -272,6 +293,111 @@ export function ProfilePage() {
                   />
                   <div className="text-right text-[11px] text-[#777387] mt-1">
                     {bio.length}/300 characters
+                  </div>
+                </div>
+
+                {/* Verification IDs: Phone Number & Aadhaar */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-[#F1EDFF]/50 border border-[#E8E4F0]">
+                  <div>
+                    <label className="block text-xs font-bold text-[#27243A] mb-1.5">
+                      Phone Number (Visible to Admin)
+                    </label>
+                    <input
+                      type="tel"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E8E4F0] bg-white text-xs font-medium text-[#27243A] outline-none focus:ring-2 focus:ring-[#7960D8]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#27243A] mb-1.5">
+                      Aadhaar Number (UIDAI - Visible to Admin)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={16}
+                      value={aadhaarNumber}
+                      onChange={(e) => setAadhaarNumber(e.target.value)}
+                      placeholder="XXXX XXXX 1234"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E8E4F0] bg-white text-xs font-medium text-[#27243A] outline-none focus:ring-2 focus:ring-[#7960D8]"
+                    />
+                  </div>
+                </div>
+
+                {/* Bank Account Details (for Earnings Withdrawal) */}
+                <div className="p-4 rounded-2xl bg-[#FFF0EC]/50 border border-[#FFC7BD] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#27243A] flex items-center gap-1.5">
+                      <Wallet className="w-4 h-4 text-[#FF6347]" />
+                      Withdrawal Bank Details (For Creator Payouts)
+                    </span>
+                    <span className="text-[10px] text-[#777387]">Direct IMPS/NEFT transfer</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#27243A] mb-1">
+                        Account Holder Name
+                      </label>
+                      <input
+                        type="text"
+                        value={bankDetails.accountHolderName}
+                        onChange={(e) => setBankDetails({ ...bankDetails, accountHolderName: e.target.value })}
+                        placeholder="As on Bank Passbook"
+                        className="w-full px-3 py-2 rounded-xl border border-[#E8E4F0] bg-white text-xs text-[#27243A] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#27243A] mb-1">
+                        Bank Name
+                      </label>
+                      <input
+                        type="text"
+                        value={bankDetails.bankName}
+                        onChange={(e) => setBankDetails({ ...bankDetails, bankName: e.target.value })}
+                        placeholder="e.g. HDFC / SBI / ICICI"
+                        className="w-full px-3 py-2 rounded-xl border border-[#E8E4F0] bg-white text-xs text-[#27243A] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#27243A] mb-1">
+                        Bank Account Number
+                      </label>
+                      <input
+                        type="text"
+                        value={bankDetails.accountNumber}
+                        onChange={(e) => setBankDetails({ ...bankDetails, accountNumber: e.target.value })}
+                        placeholder="e.g. 50100234567890"
+                        className="w-full px-3 py-2 rounded-xl border border-[#E8E4F0] bg-white text-xs font-mono text-[#27243A] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#27243A] mb-1">
+                        IFSC Code
+                      </label>
+                      <input
+                        type="text"
+                        value={bankDetails.ifscCode}
+                        onChange={(e) => setBankDetails({ ...bankDetails, ifscCode: e.target.value.toUpperCase() })}
+                        placeholder="e.g. HDFC0001234"
+                        className="w-full px-3 py-2 rounded-xl border border-[#E8E4F0] bg-white text-xs font-mono uppercase text-[#27243A] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#27243A] mb-1">
+                      UPI ID (Instant VPA Option)
+                    </label>
+                    <input
+                      type="text"
+                      value={bankDetails.upiId}
+                      onChange={(e) => setBankDetails({ ...bankDetails, upiId: e.target.value })}
+                      placeholder="e.g. name@okhdfcbank"
+                      className="w-full px-3 py-2 rounded-xl border border-[#E8E4F0] bg-white text-xs text-[#27243A] outline-none"
+                    />
                   </div>
                 </div>
 

@@ -17,6 +17,8 @@ export const registerSchema = z.object({
   gender: z.enum(['FEMALE', 'MALE', 'OTHER']).optional(),
   genderPreference: z.enum(['ANY', 'FEMALE', 'MALE']).optional(),
   role: z.enum(['CUSTOMER', 'CREATOR']).optional(),
+  phoneNumber: z.string().trim().optional(),
+  aadhaarNumber: z.string().trim().optional(),
   dateOfBirth: z.string({ required_error: 'Date of birth is required' }).refine(
     (val) => !isNaN(Date.parse(val)),
     { message: 'Invalid Date of Birth format. Please use YYYY-MM-DD.' }
