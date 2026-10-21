@@ -366,12 +366,27 @@ export function initializeSocketServer(httpServer) {
           await sessionDoc.save();
 
           try {
-            await WalletService.settleCallSession({
+            const settlement = await WalletService.settleCallSession({
               callSessionId: sessionId,
               durationSeconds: sessionDoc.durationSeconds,
               ratePerMinutePaise: sessionDoc.ratePerMinutePaise || 700,
               freePreviewSeconds: sessionDoc.freePreviewDurationSeconds || 15,
             });
+
+            if (session) {
+              if (settlement.callerWallet) {
+                io.to(session.caller.socketId).emit('wallet:settled', {
+                  wallet: settlement.callerWallet,
+                  chargePaise: settlement.totalChargePaise,
+                });
+              }
+              if (settlement.creatorWallet) {
+                io.to(session.receiver.socketId).emit('wallet:settled', {
+                  wallet: settlement.creatorWallet,
+                  earnedPaise: settlement.creatorSharePaise,
+                });
+              }
+            }
           } catch (settleErr) {
             logger.warn('Auto-settle error in call:end:', { error: settleErr.message, sessionId });
           }
@@ -512,12 +527,27 @@ export function initializeSocketServer(httpServer) {
           await sessionDoc.save();
 
           try {
-            await WalletService.settleCallSession({
+            const settlement = await WalletService.settleCallSession({
               callSessionId: sessionId,
               durationSeconds: sessionDoc.durationSeconds,
               ratePerMinutePaise: sessionDoc.ratePerMinutePaise || 700,
               freePreviewSeconds: sessionDoc.freePreviewDurationSeconds || 15,
             });
+
+            if (session) {
+              if (settlement.callerWallet) {
+                io.to(session.caller.socketId).emit('wallet:settled', {
+                  wallet: settlement.callerWallet,
+                  chargePaise: settlement.totalChargePaise,
+                });
+              }
+              if (settlement.creatorWallet) {
+                io.to(session.receiver.socketId).emit('wallet:settled', {
+                  wallet: settlement.creatorWallet,
+                  earnedPaise: settlement.creatorSharePaise,
+                });
+              }
+            }
           } catch (settleErr) {
             logger.warn('Auto-settle error in disconnect:', { error: settleErr.message, sessionId });
           }

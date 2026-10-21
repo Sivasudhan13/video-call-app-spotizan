@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
+import { getSocket } from '../services/socket';
 import { useAuth } from './AuthContext';
 
 const WalletContext = createContext(null);
@@ -43,6 +44,29 @@ export function WalletProvider({ children }) {
         isActive: true,
       });
     }
+  }, [isAuthenticated, fetchWallet]);
+
+  // Real-time socket sync when video calls settle
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleSettled = (data) => {
+      if (data?.wallet) {
+        setWallet((prev) => ({ ...prev, ...data.wallet }));
+      } else {
+        fetchWallet();
+      }
+    };
+
+    socket.on('wallet:settled', handleSettled);
+    socket.on('wallet:balance_update', handleSettled);
+
+    return () => {
+      socket.off('wallet:settled', handleSettled);
+      socket.off('wallet:balance_update', handleSettled);
+    };
   }, [isAuthenticated, fetchWallet]);
 
   const topupOrder = async (amountPaise) => {

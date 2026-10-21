@@ -5,6 +5,7 @@ import { LedgerEntry } from '../models/LedgerEntry.js';
 import { PayoutRequest } from '../models/PayoutRequest.js';
 import { CallSession } from '../models/CallSession.js';
 import { CreatorProfile } from '../models/CreatorProfile.js';
+import { User } from '../models/User.js';
 import { AppError } from '../middlewares/errorHandler.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
@@ -293,12 +294,18 @@ export class WalletService {
       };
     }
 
-    // 1. Calculate billable units (Free calls bill ₹0 and do not deduct from wallet)
+    // 1. Calculate billable units
+    // Strict rules:
+    // - Free promotional calls bill ₹0
+    // - Female callers are 100% free (female never pays for any calls)
+    const callerUser = await User.findById(callerId).select('gender');
+    const isCallerFemale = callerUser?.gender === 'FEMALE';
+
     let billableSeconds = 0;
     let billableMinutes = 0;
     let totalChargePaise = 0;
 
-    if (sessionDoc.isFreeCall) {
+    if (sessionDoc.isFreeCall || isCallerFemale) {
       billableSeconds = 0;
       billableMinutes = 0;
       totalChargePaise = 0;
@@ -314,10 +321,15 @@ export class WalletService {
     const callerWallet = await this.getOrCreateWallet(callerId);
     const creatorWallet = await this.getOrCreateWallet(creatorId);
 
-    // Reserved amount available in caller's wallet
-    const actualReserved = callerWallet.reservedPaise;
-    const payableCharge = Math.min(totalChargePaise, actualReserved);
-    const unusedReservation = Math.max(0, actualReserved - payableCharge);
+    // Available funds in caller's wallet (both reserved buffer and balance)
+    const actualReserved = callerWallet.reservedPaise || 0;
+    const actualBalance = callerWallet.balancePaise || 0;
+    const totalAvailable = actualReserved + actualBalance;
+
+    const payableCharge = Math.min(totalChargePaise, totalAvailable);
+    const deductFromReserved = Math.min(payableCharge, actualReserved);
+    const deductFromBalance = payableCharge - deductFromReserved;
+    const unusedReservation = actualReserved - deductFromReserved;
 
     // 3. Revenue Sharing (70% Creator / 30% Platform)
     const platformCommissionPercent = env.PLATFORM_COMMISSION_PERCENT || 30;
@@ -325,13 +337,17 @@ export class WalletService {
     const creatorSharePaise = Math.floor((payableCharge * creatorPercent) / 100);
     const platformSharePaise = payableCharge - creatorSharePaise;
 
-    // 4. Update Caller Wallet: deduct reservedPaise, refund unused back to balancePaise
+    // 4. Update Caller Wallet:
+    // - reservedPaise is cleared (-actualReserved).
+    // - balancePaise changes by: unusedReservation - deductFromBalance.
+    // (If unusedReservation > 0, refunded to balance; if deductFromBalance > 0, deducted from balance).
+    const callerBalanceChange = unusedReservation - deductFromBalance;
     const updatedCallerWallet = await WalletAccount.findOneAndUpdate(
       { userId: callerId },
       {
         $inc: {
           reservedPaise: -actualReserved,
-          balancePaise: unusedReservation,
+          balancePaise: callerBalanceChange,
         },
       },
       { new: true }
@@ -380,11 +396,11 @@ export class WalletService {
 
     // B. Settlement of actual charge
     if (payableCharge > 0) {
-      // Debit reserved buffer from customer
+      // Debit customer (from reserved buffer or customer liability balance)
       entriesToCreate.push({
         entryId: crypto.randomUUID(),
         userId: callerId,
-        accountType: 'RESERVED_BUFFER',
+        accountType: deductFromReserved > 0 ? 'RESERVED_BUFFER' : 'CUSTOMER_LIABILITY',
         entryType: 'DEBIT',
         amountPaise: payableCharge,
         currency: 'INR',
@@ -392,7 +408,7 @@ export class WalletService {
         referenceId: callSessionId,
         idempotencyKey,
         description: `Billed ₹${(payableCharge / 100).toFixed(2)} for ${billableMinutes}m call session ${callSessionId}`,
-        balanceAfterPaise: updatedCallerWallet.reservedPaise,
+        balanceAfterPaise: updatedCallerWallet.balancePaise,
       });
 
       // Credit Creator Payable

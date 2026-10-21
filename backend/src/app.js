@@ -75,7 +75,7 @@ app.use(['/api', '/health'], healthRoutes);
 app.use(['/api/auth', '/auth'], authRoutes);
 app.use(['/api/creators', '/creators'], creatorRouter);
 app.use(['/api/admin', '/admin'], adminRouter);
-app.use(['/api/admin', '/admin'], adminWalletRouter);
+app.use(['/api/admin', '/admin', '/api/v1/admin', '/v1/admin'], adminWalletRouter);
 app.use(['/api/admin', '/admin'], adminAnalyticsRouter);
 app.use(['/api/v1/admin', '/v1/admin'], adminAnalyticsRouter);
 app.use(['/api/calls', '/calls'], callRoutes);

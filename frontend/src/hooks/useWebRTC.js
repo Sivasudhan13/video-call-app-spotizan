@@ -168,19 +168,25 @@ export function useWebRTC() {
     peerConnectionRef.current = pc;
     const socket = getSocket();
 
-    // Ensure bidirectional audio & video transceivers so SDP negotiation always supports two-way camera
-    try {
-      pc.addTransceiver('video', { direction: 'sendrecv' });
-      pc.addTransceiver('audio', { direction: 'sendrecv' });
-    } catch (e) {}
-
     // Add local tracks to peer connection
+    const addedKinds = new Set();
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
         try {
           pc.addTrack(track, localStreamRef.current);
-        } catch (e) {}
+          addedKinds.add(track.kind);
+        } catch (e) {
+          console.warn('Track attachment note:', e);
+        }
       });
+    }
+
+    // Only add recvonly fallback transceivers if local tracks were not available yet
+    if (!addedKinds.has('video')) {
+      try { pc.addTransceiver('video', { direction: 'recvonly' }); } catch (e) {}
+    }
+    if (!addedKinds.has('audio')) {
+      try { pc.addTransceiver('audio', { direction: 'recvonly' }); } catch (e) {}
     }
 
     // Handle remote track with robust track & stream binding
@@ -200,13 +206,14 @@ export function useWebRTC() {
         remoteStreamRef.current = stream;
         setRemoteStream(stream);
         setHasRemoteVideo(true);
+        setStatus('ACTIVE'); // Remote stream established, call is active
+
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = stream;
           remoteVideoRef.current.play().catch(() => {});
         }
         stream.getVideoTracks().forEach((track) => {
           track.onunmute = () => setHasRemoteVideo(true);
-          track.onmute = () => setHasRemoteVideo(false);
           track.onended = () => setHasRemoteVideo(false);
         });
       }
@@ -370,10 +377,13 @@ export function useWebRTC() {
 
       const pc = createPeerConnection(newSessionId);
 
-      // If initiator, create and send WebRTC offer
+      // If initiator, create and send WebRTC offer with explicit media receive options
       if (initiator) {
         try {
-          const offer = await pc.createOffer();
+          const offer = await pc.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true,
+          });
           await pc.setLocalDescription(offer);
           socket.emit('call:signal', {
             sessionId: newSessionId,
@@ -700,7 +710,9 @@ export function useWebRTC() {
     localStream,
     remoteStream,
     hasRemoteVideo,
+    setHasRemoteVideo,
     hasLocalVideo,
+    setHasLocalVideo,
     // Chat & Moderation
     messages,
     isPartnerTyping,

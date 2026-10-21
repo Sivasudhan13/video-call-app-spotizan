@@ -328,6 +328,46 @@ describe('Spotizan Phase 5: Double-Entry Ledger, Wallet, Razorpay Top-up & Payou
       expect(res.body.data.callerWallet.balancePaise).toBe(9300);
       expect(res.body.data.callerWallet.reservedPaise).toBe(0);
     });
+
+    it('POST /api/wallet/settle-call: Random queue call with 0 reserved funds directly deducts from balance and credits creator 70%', async () => {
+      const randomCallSessionId = `rand_sess_${Date.now()}`;
+      await CallSession.create({
+        sessionId: randomCallSessionId,
+        callerId: customerUser._id,
+        receiverId: creatorUser._id,
+        status: 'ACTIVE',
+        ratePerMinutePaise: 700,
+      });
+
+      // Customer currently has 9300 paise balance and 0 reserved
+      const res = await request(app)
+        .post('/api/wallet/settle-call')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .send({
+          callSessionId: randomCallSessionId,
+          durationSeconds: 75, // 1 minute billable (₹7.00)
+          ratePerMinutePaise: 700,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.totalChargePaise).toBe(700);
+      expect(res.body.data.creatorSharePaise).toBe(490);
+      // Customer balance should be 9300 - 700 = 8600
+      expect(res.body.data.callerWallet.balancePaise).toBe(8600);
+      expect(res.body.data.callerWallet.reservedPaise).toBe(0);
+      // Creator earned another 490 (490 + 490 = 980)
+      expect(res.body.data.creatorWallet.creatorPayablePaise).toBe(980);
+
+      // Reset wallets so downstream tests maintain expected state
+      await WalletAccount.findOneAndUpdate(
+        { userId: creatorUser._id },
+        { $set: { creatorPayablePaise: 490 } }
+      );
+      await WalletAccount.findOneAndUpdate(
+        { userId: customerUser._id },
+        { $set: { balancePaise: 9300 } }
+      );
+    });
   });
 
   describe('4. Creator Payouts & Admin Processing', () => {

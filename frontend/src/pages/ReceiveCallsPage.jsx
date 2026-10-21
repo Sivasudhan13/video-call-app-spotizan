@@ -71,6 +71,7 @@ export function ReceiveCallsPage() {
     mainVideoSource,
     swapVideos,
     hasRemoteVideo,
+    setHasRemoteVideo,
     hasLocalVideo,
     localStream,
     remoteStream,
@@ -284,6 +285,8 @@ export function ReceiveCallsPage() {
                 autoPlay
                 playsInline
                 onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+                onPlaying={() => setHasRemoteVideo(true)}
+                onLoadedData={() => setHasRemoteVideo(true)}
                 className={`w-full h-full ${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
               />
 
@@ -352,6 +355,8 @@ export function ReceiveCallsPage() {
               autoPlay
               playsInline
               onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+              onPlaying={() => setHasRemoteVideo(true)}
+              onLoadedData={() => setHasRemoteVideo(true)}
               className="w-full h-full object-cover"
             />
             {/* Inset Female Local Camera */}

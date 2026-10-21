@@ -71,7 +71,9 @@ export function QueuePage() {
     swapVideos,
     isFreeForReceiver,
     hasRemoteVideo,
+    setHasRemoteVideo,
     hasLocalVideo,
+    setHasLocalVideo,
     localStream,
     remoteStream,
     messages,
@@ -212,6 +214,8 @@ export function QueuePage() {
                   autoPlay
                   playsInline
                   onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+                  onPlaying={() => setHasRemoteVideo(true)}
+                  onLoadedData={() => setHasRemoteVideo(true)}
                   className={`w-full h-full ${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
                 />
                 {/* Fallback only if remote video hasn't rendered tracks yet */}
@@ -307,6 +311,8 @@ export function QueuePage() {
                     autoPlay
                     playsInline
                     onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+                    onPlaying={() => setHasRemoteVideo(true)}
+                    onLoadedData={() => setHasRemoteVideo(true)}
                     className={`w-full h-full ${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
                   />
                 ) : (
@@ -316,6 +322,7 @@ export function QueuePage() {
                     playsInline
                     muted
                     onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+                    onPlaying={() => setHasLocalVideo?.(true)}
                     className={`w-full h-full ${isLocalMirrored ? 'scale-x-[-1] ' : ''}${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'} ${isVideoDisabled ? 'hidden' : ''}`}
                   />
                 )}
@@ -363,6 +370,9 @@ export function QueuePage() {
                       ref={remoteVideoRef}
                       autoPlay
                       playsInline
+                      onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+                      onPlaying={() => setHasRemoteVideo(true)}
+                      onLoadedData={() => setHasRemoteVideo(true)}
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] bg-black/70 px-2 py-0.5 rounded text-white font-medium">

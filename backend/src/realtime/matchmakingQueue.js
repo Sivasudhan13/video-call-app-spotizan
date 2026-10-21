@@ -65,8 +65,29 @@ export class MatchmakingQueue {
    * Searches for a compatible, eligible adult match.
    */
   async findMatch(candidate) {
-    for (let i = 0; i < this.queue.length; i++) {
-      const peer = this.queue[i];
+    // Sort queue by priority:
+    // If candidate is MALE or CALL mode: prioritize FEMALE or RECEIVE mode peers
+    // If candidate is FEMALE or RECEIVE mode: prioritize MALE or CALL mode peers
+    // Secondary priority: Premium subscribers, followed by FIFO order
+    const prioritizedQueue = [...this.queue].sort((a, b) => {
+      const aIsOpposite =
+        (candidate.gender === 'MALE' && (a.gender === 'FEMALE' || a.mode === 'RECEIVE')) ||
+        ((candidate.gender === 'FEMALE' || candidate.mode === 'RECEIVE') && a.gender === 'MALE');
+      const bIsOpposite =
+        (candidate.gender === 'MALE' && (b.gender === 'FEMALE' || b.mode === 'RECEIVE')) ||
+        ((candidate.gender === 'FEMALE' || candidate.mode === 'RECEIVE') && b.gender === 'MALE');
+
+      if (aIsOpposite && !bIsOpposite) return -1;
+      if (!aIsOpposite && bIsOpposite) return 1;
+
+      if (a.isPremium && !b.isPremium) return -1;
+      if (!a.isPremium && b.isPremium) return 1;
+
+      return (a.joinedAt || 0) - (b.joinedAt || 0);
+    });
+
+    for (let i = 0; i < prioritizedQueue.length; i++) {
+      const peer = prioritizedQueue[i];
 
       // Skip self
       if (peer.userId === candidate.userId || peer.socketId === candidate.socketId) {
