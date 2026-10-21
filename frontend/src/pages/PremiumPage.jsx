@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -20,6 +21,12 @@ import {
 
 export function PremiumPage() {
   const { user, isAuthenticated } = useAuth();
+
+  // Female users do not view premium purchase packages
+  if (user?.gender === 'FEMALE') {
+    return <Navigate to="/earnings" replace />;
+  }
+
   const [selectedPlan, setSelectedPlan] = useState('PREMIUM');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 

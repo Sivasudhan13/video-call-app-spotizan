@@ -78,6 +78,7 @@ export function ReceiveCallsPage() {
     isPartnerTyping,
     sendMessage,
     sendTyping,
+    initLocalStream,
   } = useWebRTC();
 
   // Strictly restrict call receiving station to verified female users
@@ -86,6 +87,30 @@ export function ReceiveCallsPage() {
       navigate('/queue', { replace: true });
     }
   }, [user, navigate]);
+
+  // Ensure local camera preview is started immediately upon mount
+  useEffect(() => {
+    initLocalStream('VIDEO').catch(() => {});
+  }, []);
+
+  // Continuous sync to video DOM elements when transitioning to active call or toggling layout
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [localStream, status, layoutMode]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+      remoteVideoRef.current.play().catch(() => {});
+    }
+  }, [remoteStream, status, layoutMode]);
 
   const [isOnline, setIsOnline] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);

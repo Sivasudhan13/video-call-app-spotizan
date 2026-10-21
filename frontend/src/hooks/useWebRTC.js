@@ -57,6 +57,25 @@ export function useWebRTC() {
       });
   }, []);
 
+  // Continuous synchronization of active streams to video DOM elements across layout/view transitions
+  useEffect(() => {
+    if (localVideoRef.current && localStreamRef.current) {
+      if (localVideoRef.current.srcObject !== localStreamRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [localStream, status, layoutMode]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStreamRef.current) {
+      if (remoteVideoRef.current.srcObject !== remoteStreamRef.current) {
+        remoteVideoRef.current.srcObject = remoteStreamRef.current;
+      }
+      remoteVideoRef.current.play().catch(() => {});
+    }
+  }, [remoteStream, status, layoutMode]);
+
   const [callMode, setCallMode] = useState('VIDEO'); // 'VIDEO' | 'AUDIO'
 
   // Request media devices with Crystal Clear HD settings & graceful compatibility fallback
@@ -105,6 +124,22 @@ export function useWebRTC() {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.play().catch(() => {});
       }
+
+      // If peer connection already initialized, attach newly acquired tracks immediately
+      if (peerConnectionRef.current && peerConnectionRef.current.signalingState !== 'closed') {
+        const senders = peerConnectionRef.current.getSenders();
+        stream.getTracks().forEach((track) => {
+          const alreadyAdded = senders.some((s) => s.track && s.track.id === track.id);
+          if (!alreadyAdded) {
+            try {
+              peerConnectionRef.current.addTrack(track, stream);
+            } catch (trackErr) {
+              console.warn('Track addition notice:', trackErr);
+            }
+          }
+        });
+      }
+
       return stream;
     } catch (err) {
       console.error('Camera/Microphone access error:', err);
@@ -133,10 +168,18 @@ export function useWebRTC() {
     peerConnectionRef.current = pc;
     const socket = getSocket();
 
+    // Ensure bidirectional audio & video transceivers so SDP negotiation always supports two-way camera
+    try {
+      pc.addTransceiver('video', { direction: 'sendrecv' });
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+    } catch (e) {}
+
     // Add local tracks to peer connection
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current);
+        try {
+          pc.addTrack(track, localStreamRef.current);
+        } catch (e) {}
       });
     }
 
@@ -344,8 +387,7 @@ export function useWebRTC() {
 
     // Signaling relay (Offer, Answer, Candidate) with candidate buffering & session recovery
     const handleCallSignal = async ({ sessionId: incomingSessionId, signal }) => {
-      const pc = peerConnectionRef.current;
-      if (!pc || !signal) return;
+      if (!signal) return;
 
       const sid = incomingSessionId || sessionIdRef.current || sessionId;
       if (incomingSessionId && !sessionIdRef.current) {
@@ -354,7 +396,31 @@ export function useWebRTC() {
       }
 
       try {
+        let pc = peerConnectionRef.current;
+
         if (signal.type === 'offer') {
+          if (!pc || pc.signalingState === 'closed') {
+            pc = createPeerConnection(sid);
+          }
+
+          // Ensure local camera tracks are ready and added to pc before creating answer
+          let stream = localStreamRef.current;
+          if (!stream || !stream.active) {
+            try {
+              stream = await initLocalStream(callMode);
+            } catch (err) {}
+          }
+
+          if (stream && pc) {
+            const senders = pc.getSenders();
+            stream.getTracks().forEach((track) => {
+              const alreadyAdded = senders.some((s) => s.track && s.track.id === track.id);
+              if (!alreadyAdded) {
+                try { pc.addTrack(track, stream); } catch (e) {}
+              }
+            });
+          }
+
           await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
 
           // Flush any early candidates buffered before remoteDescription was set
@@ -372,6 +438,7 @@ export function useWebRTC() {
             signal: { type: 'answer', sdp: answer.sdp },
           });
         } else if (signal.type === 'answer') {
+          if (!pc) return;
           await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
 
           // Flush any early candidates
@@ -382,7 +449,7 @@ export function useWebRTC() {
             } catch (candErr) {}
           }
         } else if (signal.type === 'candidate' && signal.candidate) {
-          if (!pc.remoteDescription) {
+          if (!pc || !pc.remoteDescription) {
             // Buffer candidate until remote description is set
             pendingCandidatesRef.current.push(signal.candidate);
           } else {

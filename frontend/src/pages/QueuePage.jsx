@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
@@ -157,6 +157,25 @@ export function QueuePage() {
   };
 
   const isCallActive = status === 'CONNECTING' || status === 'ACTIVE';
+
+  // Continuous synchronization of active media streams to video DOM elements across layout/view transitions
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [localStream, status, layoutMode, mainVideoSource]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+      remoteVideoRef.current.play().catch(() => {});
+    }
+  }, [remoteStream, status, layoutMode, mainVideoSource]);
 
   return (
     <div className="flex-1 flex flex-col bg-[#05070D] text-white relative overflow-hidden">
@@ -407,10 +426,10 @@ export function QueuePage() {
             {/* Right: Transparent Billing / Free Call / Girl Free Call Badge */}
             <div className="pointer-events-auto">
               {(user?.gender === 'FEMALE' || isFreeForReceiver) ? (
-                <div className="flex items-center gap-2 bg-gradient-to-r from-pink-600/95 to-purple-600/95 backdrop-blur-md border border-white/20 px-3.5 py-1.5 rounded-2xl text-xs text-white shadow-lg font-bold">
-                  <Sparkles className="w-4 h-4 text-pink-200 animate-pulse" />
+                <div className="flex items-center gap-2 bg-gradient-to-r from-emerald-600/95 to-teal-600/95 backdrop-blur-md border border-white/20 px-3.5 py-1.5 rounded-2xl text-xs text-white shadow-lg font-bold">
+                  <Sparkles className="w-4 h-4 text-emerald-200 animate-pulse" />
                   <span>
-                    Girl Free Call: <strong className="font-mono text-white">₹0.00</strong> (Free to Receive)
+                    100% Free Call For You • Zero Cost (Earn 70% Share)
                   </span>
                 </div>
               ) : isFreeCall ? (
@@ -727,7 +746,9 @@ export function QueuePage() {
               Random 1-on-1 Video Chat
             </h1>
             <p className="text-xs sm:text-sm text-[#777387] mt-2 leading-relaxed">
-              Match 1-on-1 with compatible, verified adults across India. Includes a 15-second free preview guarantee before the promotional ₹7/min billing rate starts.
+              {user?.gender === 'FEMALE'
+                ? '100% Free video calling and receiving for female users with zero wallet deduction. You earn 70% revenue share on all received calls.'
+                : 'Match 1-on-1 with compatible, verified adults across India. Includes a 15-second free preview guarantee before the promotional ₹7/min billing rate starts.'}
             </p>
           </div>
 
@@ -852,79 +873,101 @@ export function QueuePage() {
                   </div>
                 </div>
 
-                {/* Wallet Balance & Rate Status */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="flex items-center justify-between text-xs text-[#777387] bg-[#F1EDFF] p-3 rounded-xl border border-[#E8E4F0]">
-                    <span className="flex items-center gap-1.5 text-[#FF6347] font-bold">
-                      <Coins className="w-4 h-4" /> Rate:
-                    </span>
-                    <span className="text-[#27243A] font-mono font-bold">₹7.00 / min</span>
+                {/* For Female Users: 100% Free Status Banner & Link to Earnings */}
+                {user?.gender === 'FEMALE' ? (
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-[#F1EDFF] border border-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-emerald-800 text-sm">100% FREE FOR FEMALE USERS</span>
+                        <Badge variant="verified">ZERO CHARGES</Badge>
+                      </div>
+                      <p className="text-[11px] text-[#777387]">
+                        Female users never pay for any calls. You receive calls free and earn 70% revenue share.
+                      </p>
+                    </div>
+                    <Link to="/earnings" className="shrink-0">
+                      <Button variant="secondary" size="sm" className="font-bold border border-emerald-400 text-emerald-700 hover:bg-emerald-100">
+                        My Earnings →
+                      </Button>
+                    </Link>
                   </div>
+                ) : (
+                  <>
+                    {/* Wallet Balance & Rate Status for Male/Customer Callers */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="flex items-center justify-between text-xs text-[#777387] bg-[#F1EDFF] p-3 rounded-xl border border-[#E8E4F0]">
+                        <span className="flex items-center gap-1.5 text-[#FF6347] font-bold">
+                          <Coins className="w-4 h-4" /> Rate:
+                        </span>
+                        <span className="text-[#27243A] font-mono font-bold">₹7.00 / min</span>
+                      </div>
 
-                  <button
-                    type="button"
-                    onClick={openWalletModal}
-                    className="flex items-center justify-between text-xs bg-[#F1EDFF] hover:bg-[#e6deff] p-3 rounded-xl border border-[#E8E4F0] hover:border-[#B9A7F5] transition-colors cursor-pointer group"
-                  >
-                    <span className="flex items-center gap-1.5 text-[#777387] font-semibold">
-                      <Wallet className="w-4 h-4 text-[#FF6347]" /> Balance:
-                    </span>
-                    <span className="text-[#27243A] font-mono font-bold">
-                      ₹{(wallet.balancePaise / 100).toFixed(2)}
-                    </span>
-                  </button>
-                </div>
+                      <button
+                        type="button"
+                        onClick={openWalletModal}
+                        className="flex items-center justify-between text-xs bg-[#F1EDFF] hover:bg-[#e6deff] p-3 rounded-xl border border-[#E8E4F0] hover:border-[#B9A7F5] transition-colors cursor-pointer group"
+                      >
+                        <span className="flex items-center gap-1.5 text-[#777387] font-semibold">
+                          <Wallet className="w-4 h-4 text-[#FF6347]" /> Balance:
+                        </span>
+                        <span className="text-[#27243A] font-mono font-bold">
+                          ₹{(wallet.balancePaise / 100).toFixed(2)}
+                        </span>
+                      </button>
+                    </div>
 
-                {wallet.balancePaise < 700 && (
-                  <div className="p-3 rounded-xl bg-[#FFF0EC] border border-[#FFC7BD] flex items-center justify-between text-xs">
-                    <span className="text-[#D92D20] font-medium">
-                      Low balance: ₹{(wallet.balancePaise / 100).toFixed(2)} (₹7 min recommended)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={openWalletModal}
-                      className="px-2.5 py-1 rounded-lg bg-[#FF6347] hover:bg-[#e85338] text-white font-bold text-[11px] transition-colors shadow-sm"
-                    >
-                      Top Up Now
-                    </button>
-                  </div>
+                    {wallet.balancePaise < 700 && (
+                      <div className="p-3 rounded-xl bg-[#FFF0EC] border border-[#FFC7BD] flex items-center justify-between text-xs">
+                        <span className="text-[#D92D20] font-medium">
+                          Low balance: ₹{(wallet.balancePaise / 100).toFixed(2)} (₹7 min recommended)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={openWalletModal}
+                          className="px-2.5 py-1 rounded-lg bg-[#FF6347] hover:bg-[#e85338] text-white font-bold text-[11px] transition-colors shadow-sm"
+                        >
+                          Top Up Now
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Free Call Promo Banner (Togilo-inspired 6-hour rule) */}
+                    {freeCallInfo?.eligible ? (
+                      <div className="p-4 rounded-xl bg-[#FFF0EC] border border-[#FF6347]/40 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Gift className="w-5 h-5 text-[#FF6347]" />
+                          <span className="text-xs font-bold text-[#27243A]">
+                            🎁 Free 2-Minute {selectedCallMode === 'AUDIO' ? 'Voice' : 'Video'} Call Available!
+                          </span>
+                          <Badge variant="adult">1 FREE CALL / 6 HOURS</Badge>
+                        </div>
+                        <p className="text-[11px] text-[#777387]">
+                          You are eligible for one complimentary 2-minute call right now. No wallet balance or credit deduction required.
+                        </p>
+                        <Button
+                          variant="primary"
+                          size="md"
+                          disabled={!cameraConsent}
+                          onClick={() => joinQueue([selectedLanguage], true, selectedCallMode)}
+                          className="w-full shadow-tomato font-bold py-2.5 text-xs bg-[#FF6347] hover:bg-[#FF6347]/90 text-white"
+                          icon={Gift}
+                        >
+                          Start Free 2-Minute {selectedCallMode === 'AUDIO' ? 'Voice' : 'Video'} Call (₹0)
+                        </Button>
+                      </div>
+                    ) : countdownText ? (
+                      <div className="p-3.5 rounded-xl bg-[#F1EDFF] border border-[#E8E4F0] flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-[#7960D8]" />
+                          <span className="text-[#27243A] font-semibold">Next Free Call Cooldown:</span>
+                        </div>
+                        <span className="font-mono text-[#7960D8] font-bold text-xs bg-white px-2.5 py-1 rounded-lg border border-[#E8E4F0]">
+                          {countdownText}
+                        </span>
+                      </div>
+                    ) : null}
+                  </>
                 )}
-
-                {/* Free Call Promo Banner (Togilo-inspired 6-hour rule) */}
-                {freeCallInfo?.eligible ? (
-                  <div className="p-4 rounded-xl bg-[#FFF0EC] border border-[#FF6347]/40 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Gift className="w-5 h-5 text-[#FF6347]" />
-                      <span className="text-xs font-bold text-[#27243A]">
-                        🎁 Free 2-Minute {selectedCallMode === 'AUDIO' ? 'Voice' : 'Video'} Call Available!
-                      </span>
-                      <Badge variant="adult">1 FREE CALL / 6 HOURS</Badge>
-                    </div>
-                    <p className="text-[11px] text-[#777387]">
-                      You are eligible for one complimentary 2-minute call right now. No wallet balance or credit deduction required.
-                    </p>
-                    <Button
-                      variant="primary"
-                      size="md"
-                      disabled={!cameraConsent}
-                      onClick={() => joinQueue([selectedLanguage], true, selectedCallMode)}
-                      className="w-full shadow-tomato font-bold py-2.5 text-xs bg-[#FF6347] hover:bg-[#FF6347]/90 text-white"
-                      icon={Gift}
-                    >
-                      Start Free 2-Minute {selectedCallMode === 'AUDIO' ? 'Voice' : 'Video'} Call (₹0)
-                    </Button>
-                  </div>
-                ) : countdownText ? (
-                  <div className="p-3.5 rounded-xl bg-[#F1EDFF] border border-[#E8E4F0] flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-[#7960D8]" />
-                      <span className="text-[#27243A] font-semibold">Next Free Call Cooldown:</span>
-                    </div>
-                    <span className="font-mono text-[#7960D8] font-bold text-xs bg-white px-2.5 py-1 rounded-lg border border-[#E8E4F0]">
-                      {countdownText}
-                    </span>
-                  </div>
-                ) : null}
 
                 <Button
                   variant="primary"
@@ -935,7 +978,7 @@ export function QueuePage() {
                   icon={Sparkles}
                 >
                   {user?.gender === 'FEMALE'
-                    ? 'Start Receiving Calls (100% Free • Earn ₹4.90/min)'
+                    ? 'Start Receiving Calls (100% Free • Zero Cost)'
                     : `Start Random ${selectedCallMode === 'AUDIO' ? 'Voice' : 'Video'} Call (₹7.00/min)`}
                 </Button>
               </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Video, Sparkles, Menu, X, LogOut, User as UserIcon, Wallet, Plus } from 'lucide-react';
+import { Video, Sparkles, Menu, X, LogOut, User as UserIcon, Wallet, Plus, Coins } from 'lucide-react';
 import { Button } from './Button';
 import { Badge } from './Badge';
 import { api } from '../../services/api';
@@ -13,6 +13,8 @@ export function Navbar() {
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
   const { wallet, openWalletModal } = useWallet();
+
+  const isFemale = user?.gender === 'FEMALE';
 
   useEffect(() => {
     let isMounted = true;
@@ -32,12 +34,20 @@ export function Navbar() {
   const navLinks = [
     { name: 'Discover', href: '/discover' },
     { name: 'Random Queue', href: '/queue' },
-    { name: 'Premium', href: '/premium' },
-    { name: 'Pricing & Rates', href: '/pricing' },
-    ...(user?.gender === 'FEMALE'
-      ? [{ name: 'Receive Calls (Free)', href: '/receive-calls', isHighlight: true }]
+    ...(!isFemale
+      ? [
+          { name: 'Premium', href: '/premium' },
+          { name: 'Pricing & Rates', href: '/pricing' },
+        ]
       : []),
-    ...(user?.role === 'CREATOR' && user?.gender !== 'MALE' ? [{ name: 'Creator Studio', href: '/creator/dashboard' }] : []),
+    ...(isFemale
+      ? [
+          { name: 'Receive Calls (Free)', href: '/receive-calls', isHighlight: true },
+          { name: 'My Earnings', href: '/earnings', isEarnings: true },
+          { name: 'Creator Studio', href: '/creator/dashboard' },
+        ]
+      : []),
+    ...(user?.role === 'CREATOR' && !isFemale ? [{ name: 'Creator Studio', href: '/creator/dashboard' }] : []),
     ...(user?.role === 'ADMIN' ? [{ name: 'Admin Console', href: '/admin' }] : []),
   ];
 
@@ -109,36 +119,42 @@ export function Navbar() {
 
             {isAuthenticated ? (
               <div className="flex items-center gap-2.5">
-                {/* Wallet Balance Pill */}
-                <button
-                  onClick={openWalletModal}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F1EDFF] border border-[#E8E4F0] hover:border-[#B9A7F5] hover:bg-[#e7e0ff] transition-all text-xs font-semibold group cursor-pointer"
-                  title="Click to view Spotizan Wallet & Top Up"
-                >
-                  <div className="w-5 h-5 rounded-md bg-[#FFF0EC] text-[#FF6347] flex items-center justify-center">
-                    <Wallet className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="flex flex-col text-left">
-                    <span className="text-[10px] text-[#777387] leading-none">Wallet</span>
-                    <span className="text-[#27243A] font-bold leading-tight">
-                      ₹{(wallet.balancePaise / 100).toFixed(0)}
-                    </span>
-                  </div>
-                  <div className="w-4 h-4 rounded-full bg-[#7960D8] text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Plus className="w-3 h-3" />
-                  </div>
-                </button>
-
-                {/* Creator Earnings Pill */}
-                {user.role === 'CREATOR' && user.gender !== 'MALE' && (
+                {/* Female Users: Display Payable Earnings Pill linking to /earnings */}
+                {isFemale ? (
+                  <Link
+                    to="/earnings"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#F1EDFF] to-emerald-50 border border-emerald-300 hover:border-emerald-500 hover:bg-emerald-100 transition-all text-xs font-semibold group cursor-pointer shadow-sm"
+                    title="Click to view My Earnings, Bank Details & Withdrawals"
+                  >
+                    <div className="w-5 h-5 rounded-md bg-emerald-500 text-white flex items-center justify-center">
+                      <Coins className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] text-emerald-800 leading-none font-bold">Earned</span>
+                      <span className="text-[#218A58] font-black leading-tight">
+                        ₹{(wallet.creatorPayablePaise / 100).toFixed(2)}
+                      </span>
+                    </div>
+                  </Link>
+                ) : (
+                  /* Male / Customer Users: Display Wallet Balance with Top Up button */
                   <button
                     onClick={openWalletModal}
-                    className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#F1EDFF] border border-[#E8E4F0] hover:border-[#7960D8] text-xs font-semibold text-[#7960D8] transition-colors cursor-pointer"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F1EDFF] border border-[#E8E4F0] hover:border-[#B9A7F5] hover:bg-[#e7e0ff] transition-all text-xs font-semibold group cursor-pointer"
+                    title="Click to view Spotizan Wallet & Top Up"
                   >
-                    <span className="text-[10px] text-[#777387]">Earned:</span>
-                    <span className="text-[#218A58] font-bold">
-                      ₹{(wallet.creatorPayablePaise / 100).toFixed(0)}
-                    </span>
+                    <div className="w-5 h-5 rounded-md bg-[#FFF0EC] text-[#FF6347] flex items-center justify-center">
+                      <Wallet className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] text-[#777387] leading-none">Wallet</span>
+                      <span className="text-[#27243A] font-bold leading-tight">
+                        ₹{(wallet.balancePaise / 100).toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="w-4 h-4 rounded-full bg-[#7960D8] text-white flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <Plus className="w-3 h-3" />
+                    </div>
                   </button>
                 )}
 

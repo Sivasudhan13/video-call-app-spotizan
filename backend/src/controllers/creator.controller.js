@@ -107,6 +107,17 @@ export async function applyKycVerification(req, res, next) {
     const { idType, idNumberMasked, documentUrl } = validatedData;
 
     let profile = await CreatorProfile.findOne({ userId: req.user._id });
+    if (profile && (profile.isVerified || profile.verificationStatus === 'APPROVED')) {
+      return res.status(200).json({
+        success: true,
+        message: 'Your KYC verification has already been permanently approved for lifetime.',
+        data: {
+          verificationStatus: 'APPROVED',
+          isVerified: true,
+        },
+      });
+    }
+
     if (!profile) {
       profile = await CreatorProfile.create({
         userId: req.user._id,

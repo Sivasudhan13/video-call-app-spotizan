@@ -24,6 +24,7 @@ import { TermsPage } from './pages/TermsPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { RefundPage } from './pages/RefundPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { EarningsPage } from './pages/EarningsPage';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 
 export function App() {
@@ -68,10 +69,18 @@ export function App() {
               }
             />
             <Route
+              path="/earnings"
+              element={
+                <ProtectedRoute>
+                  <EarningsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/creator/earnings"
               element={
-                <ProtectedRoute allowedRoles={['CREATOR', 'ADMIN']}>
-                  <CreatorDashboardPage />
+                <ProtectedRoute>
+                  <EarningsPage />
                 </ProtectedRoute>
               }
             />

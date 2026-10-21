@@ -257,7 +257,29 @@ export function CreatorDashboardPage() {
       </div>
 
       {/* KYC Status Banner */}
-      {!profile?.isVerified ? (
+      {profile?.isVerified || profile?.verificationStatus === 'APPROVED' ? (
+        <div className="p-5 bg-[#E8F8F0] border-2 border-[#218A58]/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs text-[#218A58] shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#218A58] text-white flex items-center justify-center shrink-0 shadow-md">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="font-black text-sm text-[#27243A]">Permanent Lifetime KYC Approval Granted</span>
+                <Badge variant="verified">LIFETIME VERIFIED</Badge>
+              </div>
+              <p className="text-xs text-[#218A58] font-medium leading-relaxed">
+                Your government ID verification has been permanently approved by Spotizan Trust & Safety. You have lifetime approval to receive paid calls and withdraw earnings without ever repeating verification.
+              </p>
+            </div>
+          </div>
+          <Link to="/earnings" className="shrink-0">
+            <Button variant="secondary" size="sm" className="font-bold border border-[#218A58]/30 text-[#218A58] hover:bg-[#218A58] hover:text-white transition-colors">
+              Manage Bank & Payouts →
+            </Button>
+          </Link>
+        </div>
+      ) : (
         <Card className="bg-[#FFF0EC] border border-[#FF6347]/30 p-6 space-y-4">
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-xl bg-white border border-[#FF6347]/40 text-[#D92D20] shrink-0">
@@ -271,7 +293,7 @@ export function CreatorDashboardPage() {
                 </Badge>
               </div>
               <p className="text-xs text-[#777387] leading-relaxed mb-3">
-                To protect both customers and creators, you cannot accept paid video calls until your government ID and 18+ age proof are reviewed and approved by platform staff.
+                To protect both customers and creators, you cannot accept paid video calls until your government ID and 18+ age proof are reviewed and approved by platform staff. Once approved, your verification is permanent for a lifetime.
               </p>
 
               {profile?.verificationStatus === 'PENDING' ? (
@@ -343,14 +365,6 @@ export function CreatorDashboardPage() {
             </div>
           </div>
         </Card>
-      ) : (
-        <div className="p-4 bg-[#E8F8F0] border border-[#218A58]/30 rounded-2xl flex items-center justify-between text-xs text-[#218A58]">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-[#218A58]" />
-            <span className="font-bold">KYC Identity Verified & Approved for Live Paid Calls</span>
-          </div>
-          <Badge variant="verified">VERIFIED CREATOR</Badge>
-        </div>
       )}
 
       {/* Profile & Rates Grid */}

@@ -101,7 +101,12 @@ export async function optionalProtect(req, res, next) {
  */
 export function authorize(...roles) {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    const isAuthorized =
+      req.user &&
+      (roles.includes(req.user.role) ||
+        (roles.includes('CREATOR') && req.user.gender === 'FEMALE'));
+
+    if (!isAuthorized) {
       return next(
         new AppError(
           `Forbidden: Role '${req.user?.role || 'NONE'}' is not authorized to access this resource.`,

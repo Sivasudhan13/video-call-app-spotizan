@@ -33,9 +33,10 @@ export function WalletModal() {
     getLedger,
   } = useWallet();
   const { user } = useAuth();
+  const isFemale = user?.gender === 'FEMALE';
   const isLiveMode = import.meta.env.VITE_RAZORPAY_KEY_ID?.startsWith('rzp_live_');
 
-  const [activeTab, setActiveTab] = useState('topup');
+  const [activeTab, setActiveTab] = useState(isFemale ? 'payout' : 'topup');
   const [selectedAmount, setSelectedAmount] = useState(250);
   const [customAmount, setCustomAmount] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -257,29 +258,42 @@ export function WalletModal() {
         {/* Balance Card Banner */}
         <div className="p-5 bg-gradient-to-br from-indigo-950/40 via-slate-900 to-purple-950/30 border-b border-slate-800/80">
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-slate-950/80 border border-indigo-900/40">
-              <span className="text-xs text-indigo-300 font-medium flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5 text-amber-400" />
-                Available Balance
-              </span>
-              <div className="mt-1 flex items-baseline gap-1">
-                <span className="text-2xl font-extrabold text-white">
-                  ₹{(wallet.balancePaise / 100).toFixed(2)}
+            {isFemale ? (
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-emerald-900/40">
+                <span className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  Female User Status
                 </span>
-                <span className="text-xs text-slate-400">INR</span>
-              </div>
-              {wallet.reservedPaise > 0 && (
-                <div className="mt-1 text-[11px] text-amber-400">
-                  ₹{(wallet.reservedPaise / 100).toFixed(2)} locked in active call
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span className="text-2xl font-extrabold text-white">100% Free</span>
                 </div>
-              )}
-            </div>
+                <div className="mt-1 text-[11px] text-emerald-400 font-medium">Never charged for any calls</div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-indigo-900/40">
+                <span className="text-xs text-indigo-300 font-medium flex items-center gap-1.5">
+                  <Coins className="w-3.5 h-3.5 text-amber-400" />
+                  Available Balance
+                </span>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span className="text-2xl font-extrabold text-white">
+                    ₹{(wallet.balancePaise / 100).toFixed(2)}
+                  </span>
+                  <span className="text-xs text-slate-400">INR</span>
+                </div>
+                {wallet.reservedPaise > 0 && (
+                  <div className="mt-1 text-[11px] text-amber-400">
+                    ₹{(wallet.reservedPaise / 100).toFixed(2)} locked in active call
+                  </div>
+                )}
+              </div>
+            )}
 
-            {user?.role === 'CREATOR' ? (
+            {isFemale || user?.role === 'CREATOR' ? (
               <div className="p-4 rounded-xl bg-slate-950/80 border border-purple-900/40">
                 <span className="text-xs text-purple-300 font-medium flex items-center gap-1.5">
                   <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-400" />
-                  Creator Earnings
+                  Payable Creator Earnings
                 </span>
                 <div className="mt-1 flex items-baseline gap-1">
                   <span className="text-2xl font-extrabold text-emerald-400">
@@ -287,7 +301,7 @@ export function WalletModal() {
                   </span>
                   <span className="text-xs text-slate-400">INR</span>
                 </div>
-                <div className="mt-1 text-[11px] text-slate-400">70% revenue share</div>
+                <div className="mt-1 text-[11px] text-slate-400">70% revenue share credited</div>
               </div>
             ) : (
               <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-center">
@@ -300,47 +314,61 @@ export function WalletModal() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 px-5 bg-slate-950/40">
-          <button
-            onClick={() => setActiveTab('topup')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-              activeTab === 'topup'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <CreditCard className="w-3.5 h-3.5" />
-            Top-up Balance
-          </button>
+        <div className="flex items-center justify-between border-b border-slate-800 px-5 bg-slate-950/40">
+          <div className="flex">
+            {!isFemale && (
+              <button
+                onClick={() => setActiveTab('topup')}
+                className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+                  activeTab === 'topup'
+                    ? 'border-indigo-500 text-indigo-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                Top-up Balance
+              </button>
+            )}
 
-          {user?.role === 'CREATOR' && (
+            {(isFemale || user?.role === 'CREATOR') && (
+              <button
+                onClick={() => setActiveTab('payout')}
+                className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+                  activeTab === 'payout'
+                    ? 'border-indigo-500 text-indigo-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                Withdraw Earnings
+              </button>
+            )}
+
             <button
-              onClick={() => setActiveTab('payout')}
+              onClick={() => {
+                setActiveTab('history');
+                loadLedger();
+              }}
               className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'payout'
+                activeTab === 'history'
                   ? 'border-indigo-500 text-indigo-400'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              Withdraw Earnings
+              <History className="w-3.5 h-3.5" />
+              Ledger History
             </button>
-          )}
+          </div>
 
-          <button
-            onClick={() => {
-              setActiveTab('history');
-              loadLedger();
-            }}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-              activeTab === 'history'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <History className="w-3.5 h-3.5" />
-            Ledger History
-          </button>
+          {isFemale && (
+            <a
+              href="/earnings"
+              onClick={closeWalletModal}
+              className="text-xs font-bold text-emerald-400 hover:text-emerald-300 py-1 px-2.5 rounded-lg bg-emerald-950/60 border border-emerald-800/60 transition-colors"
+            >
+              Full Earnings Page →
+            </a>
+          )}
         </div>
 
         {/* Content Body */}

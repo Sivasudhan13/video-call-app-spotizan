@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Card, CardHeader } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Alert } from '../components/common/Alert';
 import { Coins, CheckCircle, Shield, FileText, Scale, CreditCard } from 'lucide-react';
 import { RazorpayCheckoutButton } from '../components/payment/RazorpayCheckoutButton';
 import { useWallet } from '../context/WalletContext';
+import { useAuth } from '../context/AuthContext';
 
 export function PricingPage() {
+  const { user } = useAuth();
   const { wallet, refreshWallet } = useWallet();
+
+  // Female users receive calls 100% free and do not pay per-minute rates
+  if (user?.gender === 'FEMALE') {
+    return <Navigate to="/earnings" replace />;
+  }
+
   const [selectedTopup, setSelectedTopup] = useState(100); // 100 paise = ₹1
   const isLive = import.meta.env.VITE_RAZORPAY_KEY_ID?.startsWith('rzp_live_');
 
