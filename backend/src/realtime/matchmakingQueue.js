@@ -169,6 +169,16 @@ export class MatchmakingQueue {
     return this.activeSessions.get(sessionId) || null;
   }
 
+  getSessionBySocketId(socketId) {
+    if (!socketId) return null;
+    for (const session of this.activeSessions.values()) {
+      if (session.caller.socketId === socketId || session.receiver.socketId === socketId) {
+        return session;
+      }
+    }
+    return null;
+  }
+
   endSession(sessionId) {
     const session = this.activeSessions.get(sessionId);
     if (session) {

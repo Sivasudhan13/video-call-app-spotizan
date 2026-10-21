@@ -57,10 +57,11 @@ export function AdminDashboardPage() {
     if (path.includes('/admin/calls') || path.includes('/admin/live-monitor')) return 'active-calls';
     if (path.includes('/admin/users')) return 'users';
     if (path.includes('/admin/creators') || path.includes('/admin/verifications')) return 'kyc';
-    if (path.includes('/admin/payments')) return 'payouts';
+    if (path.includes('/admin/payments') || path.includes('/admin/payouts')) return 'payouts';
     if (path.includes('/admin/reports') || path.includes('/admin/safety')) return 'reports';
     if (path.includes('/admin/audit-logs')) return 'audit';
     if (path.includes('/admin/settings')) return 'settings';
+    if (path.includes('/admin/analytics') || path.includes('/admin/overview') || path.includes('/admin/dashboard')) return 'overview';
     return 'overview';
   };
 
@@ -84,20 +85,40 @@ export function AdminDashboardPage() {
   const adminCallerVideoRef = useRef(null);
   const adminReceiverVideoRef = useRef(null);
   const adminPcsRef = useRef({ caller: null, receiver: null });
+  const adminStreamsRef = useRef({ caller: null, receiver: null });
+  const adminPendingCandidatesRef = useRef({ caller: [], receiver: [] });
   const [adminStreamStatus, setAdminStreamStatus] = useState({ caller: 'connecting', receiver: 'connecting' });
   const [adminAudioMuted, setAdminAudioMuted] = useState(true);
+
+  // Synchronize live camera stream objects to video DOM elements
+  useEffect(() => {
+    if (adminCallerVideoRef.current && adminStreamsRef.current.caller) {
+      if (adminCallerVideoRef.current.srcObject !== adminStreamsRef.current.caller) {
+        adminCallerVideoRef.current.srcObject = adminStreamsRef.current.caller;
+      }
+      adminCallerVideoRef.current.play().catch(() => {});
+    }
+    if (adminReceiverVideoRef.current && adminStreamsRef.current.receiver) {
+      if (adminReceiverVideoRef.current.srcObject !== adminStreamsRef.current.receiver) {
+        adminReceiverVideoRef.current.srcObject = adminStreamsRef.current.receiver;
+      }
+      adminReceiverVideoRef.current.play().catch(() => {});
+    }
+  }, [adminStreamStatus, inspectingSession]);
 
   // Live Video Call Show WebRTC Observation Listener
   useEffect(() => {
     if (!inspectingSession) {
       if (adminPcsRef.current.caller) {
-        adminPcsRef.current.caller.close();
+        try { adminPcsRef.current.caller.close(); } catch (e) {}
         adminPcsRef.current.caller = null;
       }
       if (adminPcsRef.current.receiver) {
-        adminPcsRef.current.receiver.close();
+        try { adminPcsRef.current.receiver.close(); } catch (e) {}
         adminPcsRef.current.receiver = null;
       }
+      adminStreamsRef.current = { caller: null, receiver: null };
+      adminPendingCandidatesRef.current = { caller: [], receiver: [] };
       setAdminStreamStatus({ caller: 'connecting', receiver: 'connecting' });
       return;
     }
@@ -114,12 +135,27 @@ export function AdminDashboardPage() {
             iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
           });
           adminPcsRef.current[type] = pc;
+          if (!adminPendingCandidatesRef.current[type]) {
+            adminPendingCandidatesRef.current[type] = [];
+          }
 
           pc.ontrack = (event) => {
+            let stream = null;
             if (event.streams && event.streams[0]) {
+              stream = event.streams[0];
+            } else if (event.track) {
+              if (!adminStreamsRef.current[type]) {
+                adminStreamsRef.current[type] = new MediaStream();
+              }
+              adminStreamsRef.current[type].addTrack(event.track);
+              stream = adminStreamsRef.current[type];
+            }
+
+            if (stream) {
+              adminStreamsRef.current[type] = stream;
               const videoEl = type === 'caller' ? adminCallerVideoRef.current : adminReceiverVideoRef.current;
               if (videoEl) {
-                videoEl.srcObject = event.streams[0];
+                videoEl.srcObject = stream;
                 videoEl.play().catch(() => {});
               }
               setAdminStreamStatus((prev) => ({ ...prev, [type]: 'connected' }));
@@ -140,6 +176,16 @@ export function AdminDashboardPage() {
 
         if (signal.type === 'offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
+
+          // Flush any buffered ICE candidates that arrived before remoteDescription
+          const queue = adminPendingCandidatesRef.current[type] || [];
+          while (queue.length > 0) {
+            const cand = queue.shift();
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (e) {}
+          }
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           socket.emit('admin:signal', {
@@ -149,7 +195,12 @@ export function AdminDashboardPage() {
             peerType: type,
           });
         } else if (signal.type === 'candidate' && signal.candidate) {
-          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          if (!pc.remoteDescription) {
+            if (!adminPendingCandidatesRef.current[type]) adminPendingCandidatesRef.current[type] = [];
+            adminPendingCandidatesRef.current[type].push(signal.candidate);
+          } else {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          }
         }
       } catch (err) {
         console.warn('Admin live stream negotiation notice:', err);
@@ -171,13 +222,15 @@ export function AdminDashboardPage() {
       socket.off('admin:signal', handleAdminSignal);
       socket.off('call:ended', handleObservedCallEnded);
       if (adminPcsRef.current.caller) {
-        adminPcsRef.current.caller.close();
+        try { adminPcsRef.current.caller.close(); } catch (e) {}
         adminPcsRef.current.caller = null;
       }
       if (adminPcsRef.current.receiver) {
-        adminPcsRef.current.receiver.close();
+        try { adminPcsRef.current.receiver.close(); } catch (e) {}
         adminPcsRef.current.receiver = null;
       }
+      adminStreamsRef.current = { caller: null, receiver: null };
+      adminPendingCandidatesRef.current = { caller: [], receiver: [] };
     };
   }, [inspectingSession]);
 
@@ -711,6 +764,100 @@ export function AdminDashboardPage() {
                   </Button>
                 </Card>
               </div>
+
+              {/* PLATFORM ANALYSIS & LIVE OPERATIONS WORKFLOW */}
+              <Card className="p-6 border-[#E8E4F0] bg-white shadow-card space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#E8E4F0] gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-[#7960D8]" />
+                      <h3 className="font-bold text-base text-[#27243A]">Platform Analysis & Operations Workflow</h3>
+                    </div>
+                    <p className="text-xs text-[#777387] mt-0.5">
+                      End-to-end verified pipeline: Customer calling, female free receiving, live camera show observation, and payout settlement.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      All Workflows Operational
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4-Step Interactive Pipeline */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {/* Step 1 */}
+                  <div className="p-4 rounded-2xl bg-[#F8F7FC] border border-[#E8E4F0] space-y-2 hover:border-[#7960D8]/40 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="w-6 h-6 rounded-lg bg-[#7960D8] text-white font-bold text-xs flex items-center justify-center">1</span>
+                      <Coins className="w-4 h-4 text-amber-500" />
+                    </div>
+                    <h4 className="font-bold text-sm text-[#27243A]">Male Caller Billing</h4>
+                    <p className="text-[11px] text-[#777387]">
+                      Male accounts debited ₹7/min (after 15s preview) via Razorpay wallet balance.
+                    </p>
+                    <div className="pt-2 text-[10px] text-[#7960D8] font-bold">
+                      Completed: {overview?.completedCalls ?? 0} calls
+                    </div>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200/60 space-y-2 hover:border-emerald-400 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">2</span>
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <h4 className="font-bold text-sm text-[#27243A]">Female Free Receive</h4>
+                    <p className="text-[11px] text-[#777387]">
+                      Females receive calls 100% free with ₹0 deduction; 70% share (₹4.90/min) credited.
+                    </p>
+                    <div className="pt-2 text-[10px] text-emerald-700 font-bold">
+                      Guaranteed ₹0.00 Cost
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="p-4 rounded-2xl bg-orange-50/60 border border-orange-200/60 space-y-2 hover:border-orange-400 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="w-6 h-6 rounded-lg bg-[#FF6347] text-white font-bold text-xs flex items-center justify-center">3</span>
+                      <Radio className="w-4 h-4 text-[#FF6347]" />
+                    </div>
+                    <h4 className="font-bold text-sm text-[#27243A]">Live Camera Show</h4>
+                    <p className="text-[11px] text-[#777387]">
+                      Admin stealth video inspection: real-time dual camera feeds and immediate force disconnect.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => switchTab('active-calls')}
+                        className="text-[10px] text-[#FF6347] font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        Inspect Active ({overview?.activeCalls ?? 0}) →
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-200/60 space-y-2 hover:border-purple-400 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="w-6 h-6 rounded-lg bg-[#2A1B54] text-white font-bold text-xs flex items-center justify-center">4</span>
+                      <CreditCard className="w-4 h-4 text-[#7960D8]" />
+                    </div>
+                    <h4 className="font-bold text-sm text-[#27243A]">Bank Payout Settlement</h4>
+                    <p className="text-[11px] text-[#777387]">
+                      Female creators submit bank & UPI details; Admin reviews, inputs UTR, and marks paid.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => switchTab('payouts')}
+                        className="text-[10px] text-[#7960D8] font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        Review Payouts ({payouts.length}) →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </Card>
             </div>
           )}
 

@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWallet } from '../context/WalletContext';
-import { api } from '../services/api';
-import { connectSocket, getSocket } from '../services/socket';
+import { useWebRTC } from '../hooks/useWebRTC';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -14,6 +13,7 @@ import {
   VideoOff,
   Mic,
   MicOff,
+  PhoneOff,
   Sparkles,
   ShieldCheck,
   CheckCircle2,
@@ -30,12 +30,55 @@ import {
   ArrowRight,
   Shield,
   Zap,
+  MessageSquare,
+  Send,
+  Maximize2,
+  Minimize2,
+  Camera,
+  LayoutGrid,
+  Layers,
 } from 'lucide-react';
 
 export function ReceiveCallsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { wallet } = useWallet();
+
+  // WebRTC Calling Engine Hook
+  const {
+    status,
+    partner,
+    sessionId,
+    isInitiator,
+    callDurationSeconds,
+    isAudioMuted,
+    isVideoDisabled,
+    callMode,
+    errorMessage: rtcError,
+    localVideoRef,
+    remoteVideoRef,
+    joinQueue,
+    leaveQueue,
+    endCall,
+    toggleAudio,
+    toggleVideo,
+    layoutMode,
+    toggleLayoutMode,
+    videoFitMode,
+    toggleVideoFit,
+    isLocalMirrored,
+    toggleMirror,
+    mainVideoSource,
+    swapVideos,
+    hasRemoteVideo,
+    hasLocalVideo,
+    localStream,
+    remoteStream,
+    messages,
+    isPartnerTyping,
+    sendMessage,
+    sendTyping,
+  } = useWebRTC();
 
   // Strictly restrict call receiving station to verified female users
   useEffect(() => {
@@ -44,29 +87,18 @@ export function ReceiveCallsPage() {
     }
   }, [user, navigate]);
 
-  // Local camera preview ref & stream
-  const previewVideoRef = useRef(null);
-  const previewStreamRef = useRef(null);
+  const [isOnline, setIsOnline] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [callsReceivedToday, setCallsReceivedToday] = useState(0);
+
+  // Incoming Call Ring Modal state
+  const [incomingCall, setIncomingCall] = useState(null);
+  const [ringCountdown, setRingCountdown] = useState(30);
   const audioContextRef = useRef(null);
   const ringtoneIntervalRef = useRef(null);
 
-  const [isOnline, setIsOnline] = useState(true);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraLoading, setCameraLoading] = useState(false);
-  const [isMirrored, setIsMirrored] = useState(true);
-  const [micMuted, setMicMuted] = useState(false);
-  const [videoMuted, setVideoMuted] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(null);
-
-  // Incoming Call State
-  const [incomingCall, setIncomingCall] = useState(null);
-  const [ringCountdown, setRingCountdown] = useState(30);
-
-  // Stats
-  const [callsReceivedToday, setCallsReceivedToday] = useState(0);
-  const [minutesEarned, setMinutesEarned] = useState(0);
-
-  // Start in-browser synthesized gentle chime ringtone
+  // Synthesized gentle chime ringtone
   const playRingtoneChime = () => {
     try {
       if (!audioContextRef.current) {
@@ -88,104 +120,42 @@ export function ReceiveCallsPage() {
       osc.start();
       osc.stop(ctx.currentTime + 0.5);
     } catch (e) {
-      // Audio autoplay restrictions gracefully handled
+      // Gracefully handle browser autoplay policy
     }
   };
 
-  // Start local camera preview so girl can verify her camera view is crystal clear
-  const startCameraPreview = async () => {
-    if (previewStreamRef.current) return;
-    setCameraLoading(true);
-    setErrorMessage(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1920, min: 1280 },
-          height: { ideal: 1080, min: 720 },
-          frameRate: { ideal: 30, max: 60 },
-          facingMode: 'user',
-        },
-        audio: true,
-      });
-      previewStreamRef.current = stream;
-      if (previewVideoRef.current) {
-        previewVideoRef.current.srcObject = stream;
-      }
-      setCameraActive(true);
-    } catch (err) {
-      console.warn('Camera preview permission note:', err);
-      setErrorMessage('Camera or Microphone access was denied. Please allow permissions to check your camera.');
-    } finally {
-      setCameraLoading(false);
+  // Join queue in RECEIVE mode on mount if online
+  useEffect(() => {
+    if (isOnline && status === 'IDLE') {
+      joinQueue(['English', 'Hindi'], false, 'VIDEO', 'RECEIVE');
+    }
+  }, [isOnline, status]);
+
+  // Track completed calls count
+  useEffect(() => {
+    if (status === 'ENDED') {
+      setCallsReceivedToday((prev) => prev + 1);
+      // Automatically rejoin receive queue after brief cooldown
+      const timer = setTimeout(() => {
+        if (isOnline) {
+          joinQueue(['English', 'Hindi'], false, 'VIDEO', 'RECEIVE');
+        }
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [status, isOnline]);
+
+  const toggleOnlineStatus = () => {
+    const nextStatus = !isOnline;
+    setIsOnline(nextStatus);
+    if (nextStatus) {
+      joinQueue(['English', 'Hindi'], false, 'VIDEO', 'RECEIVE');
+    } else {
+      leaveQueue();
     }
   };
 
-  const stopCameraPreview = () => {
-    if (previewStreamRef.current) {
-      previewStreamRef.current.getTracks().forEach((track) => track.stop());
-      previewStreamRef.current = null;
-    }
-    setCameraActive(false);
-  };
-
-  // Auto start camera preview on mount
-  useEffect(() => {
-    startCameraPreview();
-    return () => {
-      stopCameraPreview();
-      if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
-    };
-  }, []);
-
-  // Ensure preview video element always attaches stream
-  useEffect(() => {
-    if (previewVideoRef.current && previewStreamRef.current) {
-      previewVideoRef.current.srcObject = previewStreamRef.current;
-      previewVideoRef.current.play().catch(() => {});
-    }
-  }, [cameraActive]);
-
-  // Socket connection to listen for incoming calls and queue matches
-  useEffect(() => {
-    const socket = connectSocket();
-
-    // Register presence in RECEIVE mode if online
-    if (isOnline) {
-      socket.emit('queue:join', {
-        mode: 'RECEIVE',
-        languages: user?.languages || ['English', 'Hindi'],
-        isFreeCall: false,
-      });
-    }
-
-    const handleIncomingCall = (data) => {
-      setIncomingCall(data);
-      setRingCountdown(30);
-
-      // Play soft ring chime
-      playRingtoneChime();
-      if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
-      ringtoneIntervalRef.current = setInterval(playRingtoneChime, 2500);
-    };
-
-    const handleMatchFound = ({ sessionId, partner, isInitiator }) => {
-      // Immediately stop preview stream so queue page can claim camera
-      stopCameraPreview();
-      if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
-      navigate('/queue?mode=receive&autoJoin=true');
-    };
-
-    socket.on('call:incoming', handleIncomingCall);
-    socket.on('match:found', handleMatchFound);
-
-    return () => {
-      socket.off('call:incoming', handleIncomingCall);
-      socket.off('match:found', handleMatchFound);
-      if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
-    };
-  }, [isOnline, user, navigate]);
-
-  // Countdown timer for incoming call modal
+  // Ring countdown effect
   useEffect(() => {
     let timer;
     if (incomingCall && ringCountdown > 0) {
@@ -206,9 +176,10 @@ export function ReceiveCallsPage() {
 
   const handleAcceptCall = () => {
     if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
-    stopCameraPreview();
-    // Navigate to queue calling screen with both cameras clear
-    navigate('/queue?mode=receive&autoJoin=true');
+    setIncomingCall(null);
+    if (status === 'IDLE') {
+      joinQueue(['English', 'Hindi'], false, 'VIDEO', 'RECEIVE');
+    }
   };
 
   const handleDeclineCall = () => {
@@ -216,23 +187,7 @@ export function ReceiveCallsPage() {
     setIncomingCall(null);
   };
 
-  const toggleOnlineStatus = () => {
-    const nextStatus = !isOnline;
-    setIsOnline(nextStatus);
-    const socket = getSocket();
-    if (socket) {
-      if (nextStatus) {
-        socket.emit('queue:join', {
-          mode: 'RECEIVE',
-          languages: user?.languages || ['English', 'Hindi'],
-        });
-      } else {
-        socket.emit('queue:leave');
-      }
-    }
-  };
-
-  // Test incoming call demonstration for the girl
+  // Simulated test ring demonstration for girl
   const triggerDemoIncomingCall = () => {
     setIncomingCall({
       sessionId: `demo_${Date.now()}`,
@@ -251,6 +206,256 @@ export function ReceiveCallsPage() {
     ringtoneIntervalRef.current = setInterval(playRingtoneChime, 2500);
   };
 
+  const formatTimer = (totalSeconds) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const isCallActive = status === 'CONNECTING' || status === 'ACTIVE';
+
+  // =========================================================================
+  // VIEW A: LIVE ACTIVE VIDEO CALL SCREEN (Both cameras 100% visible & clear)
+  // =========================================================================
+  if (isCallActive) {
+    return (
+      <div className="flex-1 flex flex-col bg-[#05070D] text-white relative overflow-hidden min-h-[calc(100vh-4rem)]">
+        {/* TOP STATUS BAR OVERLAY */}
+        <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-none">
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <span className="px-3 py-1.5 rounded-full bg-emerald-500/90 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20">
+              <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+              100% FREE CALL FOR YOU
+            </span>
+            <span className="px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-md text-purple-300 border border-purple-500/30 text-xs font-mono font-bold flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-purple-400" />
+              {formatTimer(callDurationSeconds)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <span className="px-3 py-1.5 rounded-full bg-[#7960D8]/90 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-[#7960D8]/20">
+              <Coins className="w-3.5 h-3.5 text-amber-300" />
+              Earned: ₹{((callDurationSeconds * 7 * 0.7) / 60).toFixed(2)}
+            </span>
+            <button
+              onClick={toggleLayoutMode}
+              className="p-2 rounded-xl bg-black/60 hover:bg-black/90 text-slate-200 border border-white/10 backdrop-blur-md transition-colors"
+              title="Toggle Layout (Grid vs PiP)"
+            >
+              {layoutMode === 'GRID' ? <Layers className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* DUAL CAMERA VIEW */}
+        {layoutMode === 'GRID' ? (
+          /* DUAL CAMERA 50/50 SPLIT SCREEN */
+          <div className="w-full h-full p-4 sm:p-6 pt-20 pb-28 grid grid-cols-1 md:grid-cols-2 gap-4 items-center justify-center max-w-7xl mx-auto flex-1">
+            {/* 1. CALLER / CUSTOMER CAMERA PANE */}
+            <div className="relative w-full h-full min-h-[280px] sm:min-h-[420px] bg-slate-900 rounded-3xl overflow-hidden border-2 border-indigo-500/40 shadow-2xl flex items-center justify-center group">
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+                className={`w-full h-full ${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
+              />
+
+              {!hasRemoteVideo && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-none z-10">
+                  <div className="w-20 h-20 rounded-2xl bg-indigo-950/90 border border-indigo-700/60 flex items-center justify-center text-3xl font-extrabold text-indigo-300 shadow-2xl mb-3">
+                    {partner?.displayName?.charAt(0).toUpperCase() || 'C'}
+                  </div>
+                  <h3 className="text-base font-bold text-white">{partner?.displayName || 'Customer Caller'}</h3>
+                  <p className="text-xs text-indigo-300 animate-pulse mt-1">
+                    Establishing encrypted WebRTC 1080p stream...
+                  </p>
+                </div>
+              )}
+
+              {/* Tag Header */}
+              <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 z-20">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-bold text-white">
+                  Customer: {partner?.displayName || 'Customer'}
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono">1080p HD</span>
+              </div>
+            </div>
+
+            {/* 2. YOUR CAMERA PANE (FEMALE RECEIVER) */}
+            <div className="relative w-full h-full min-h-[280px] sm:min-h-[420px] bg-slate-900 rounded-3xl overflow-hidden border-2 border-purple-500/40 shadow-2xl flex items-center justify-center group">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+                className={`w-full h-full ${isLocalMirrored ? 'scale-x-[-1] ' : ''}${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'} ${isVideoDisabled ? 'hidden' : ''}`}
+              />
+
+              {isVideoDisabled && (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-400 text-xs gap-2">
+                  <VideoOff className="w-10 h-10 text-slate-500" />
+                  <span className="font-semibold text-slate-300">Your Camera is Paused</span>
+                </div>
+              )}
+
+              {/* Tag Header */}
+              <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20">
+                <div className="flex items-center gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10">
+                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                  <span className="text-xs font-bold text-white">Your Camera (Live Crystal Clear)</span>
+                </div>
+                <button
+                  onClick={toggleMirror}
+                  className="p-1.5 rounded-lg bg-black/60 hover:bg-black/90 text-slate-200 border border-white/10 text-xs flex items-center gap-1"
+                  title="Flip Mirror"
+                >
+                  <Repeat className="w-3.5 h-3.5" />
+                  <span>{isLocalMirrored ? 'Mirrored' : 'Normal'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* PICTURE-IN-PICTURE (PiP) MODE */
+          <div className="relative w-full h-full flex items-center justify-center bg-black flex-1">
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+              className="w-full h-full object-cover"
+            />
+            {/* Inset Female Local Camera */}
+            <div className="absolute bottom-24 right-4 z-20 w-48 aspect-video bg-slate-900 rounded-2xl overflow-hidden border-2 border-purple-500 shadow-2xl">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+                className={`w-full h-full object-cover ${isLocalMirrored ? 'scale-x-[-1]' : ''} ${isVideoDisabled ? 'hidden' : ''}`}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* BOTTOM CALL CONTROL CONSOLE */}
+        <div className="absolute bottom-6 inset-x-0 z-30 flex items-center justify-center gap-3 px-4 pointer-events-none">
+          <div className="flex items-center gap-3 p-2 rounded-2xl bg-slate-950/90 border border-white/10 shadow-2xl backdrop-blur-xl pointer-events-auto">
+            {/* Audio Mute */}
+            <button
+              onClick={toggleAudio}
+              className={`p-3.5 rounded-xl font-bold transition-all ${
+                isAudioMuted ? 'bg-rose-600 text-white shadow-rose-600/30' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+              }`}
+              title={isAudioMuted ? 'Unmute Mic' : 'Mute Mic'}
+            >
+              {isAudioMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
+
+            {/* Video Pause */}
+            <button
+              onClick={toggleVideo}
+              className={`p-3.5 rounded-xl font-bold transition-all ${
+                isVideoDisabled ? 'bg-rose-600 text-white shadow-rose-600/30' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+              }`}
+              title={isVideoDisabled ? 'Turn Video On' : 'Pause Video'}
+            >
+              {isVideoDisabled ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+            </button>
+
+            {/* Chat Drawer Toggle */}
+            <button
+              onClick={() => setChatOpen(!chatOpen)}
+              className="p-3.5 rounded-xl bg-slate-800 text-slate-200 hover:bg-slate-700 font-bold transition-all relative"
+              title="Open Chat"
+            >
+              <MessageSquare className="w-5 h-5" />
+              {messages.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#7960D8] text-[9px] font-bold flex items-center justify-center">
+                  {messages.length}
+                </span>
+              )}
+            </button>
+
+            {/* End Call Button */}
+            <button
+              onClick={() => endCall('USER_HUNG_UP')}
+              className="px-6 py-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-sm flex items-center gap-2 shadow-lg shadow-rose-600/40 transition-all cursor-pointer"
+            >
+              <PhoneOff className="w-5 h-5" />
+              <span>End Call</span>
+            </button>
+          </div>
+        </div>
+
+        {/* IN-CALL CHAT DRAWER */}
+        {chatOpen && (
+          <div className="absolute top-20 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] h-96 bg-slate-950/95 border border-purple-500/40 rounded-3xl shadow-2xl backdrop-blur-xl flex flex-col overflow-hidden animate-fade-in">
+            <div className="p-3.5 border-b border-white/10 flex items-center justify-between bg-white/5">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <MessageSquare className="w-4 h-4 text-[#7960D8]" />
+                Live In-Call Chat
+              </span>
+              <button onClick={() => setChatOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-3 flex-1 overflow-y-auto space-y-2 text-xs">
+              {messages.length === 0 ? (
+                <div className="text-center text-slate-500 pt-16">No messages yet. Send a greeting!</div>
+              ) : (
+                messages.map((m, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-2.5 rounded-xl max-w-[85%] ${
+                      m.isMe ? 'ml-auto bg-[#7960D8] text-white' : 'mr-auto bg-slate-800 text-slate-200'
+                    }`}
+                  >
+                    <div>{m.text || m.message}</div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-2 border-t border-white/10 flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Type message..."
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && chatInput.trim()) {
+                    sendMessage(chatInput.trim());
+                    setChatInput('');
+                  }
+                }}
+                className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#7960D8]"
+              />
+              <button
+                onClick={() => {
+                  if (chatInput.trim()) {
+                    sendMessage(chatInput.trim());
+                    setChatInput('');
+                  }
+                }}
+                className="p-2 rounded-xl bg-[#7960D8] text-white hover:bg-[#684fc9]"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW B: RECEIVE CALLS RADAR & CAMERA CLARITY STATION (Waiting / Online)
+  // =========================================================================
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 flex-1 bg-white text-[#27243A]">
       {/* SECTION HEADER BANNER */}
@@ -350,60 +555,62 @@ export function ReceiveCallsPage() {
               <p className="text-xs text-[#777387]">Check your lighting and view before receiving calls.</p>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${cameraActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
+              <span className={`w-2 h-2 rounded-full ${localStream ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
               <span className="text-[11px] font-bold text-[#777387]">
-                {cameraActive ? 'Camera HD Active' : 'Camera Off'}
+                {localStream ? 'Camera HD Active' : 'Camera Off'}
               </span>
             </div>
           </div>
 
-          {errorMessage && <Alert type="error">{errorMessage}</Alert>}
+          {rtcError && <Alert type="error">{rtcError}</Alert>}
 
           {/* Live Video Box */}
           <div className="relative aspect-video rounded-2xl bg-slate-950 overflow-hidden border-2 border-[#7960D8]/40 shadow-xl flex items-center justify-center group">
             <video
-              ref={previewVideoRef}
+              ref={localVideoRef}
               autoPlay
               playsInline
               muted
-              className={`w-full h-full object-cover ${isMirrored ? 'scale-x-[-1]' : ''} ${cameraActive ? 'block' : 'hidden'}`}
+              onLoadedMetadata={(e) => e.target.play().catch(() => {})}
+              className={`w-full h-full object-cover ${isLocalMirrored ? 'scale-x-[-1]' : ''} ${hasLocalVideo && !isVideoDisabled ? 'block' : 'hidden'}`}
             />
 
-            {!cameraActive && (
+            {(!hasLocalVideo || isVideoDisabled) && (
               <div className="text-center p-6 space-y-3">
                 <div className="w-16 h-16 rounded-2xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-indigo-300 mx-auto">
                   <VideoOff className="w-8 h-8" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-white text-sm">Camera Preview Inactive</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">Click below to activate and preview your video feed.</p>
+                  <h4 className="font-bold text-white text-sm">
+                    {isVideoDisabled ? 'Camera is Paused' : 'Camera Initializing...'}
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Your camera feed will display here automatically.</p>
                 </div>
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={startCameraPreview}
-                  loading={cameraLoading}
+                  onClick={() => joinQueue(['English', 'Hindi'], false, 'VIDEO', 'RECEIVE')}
                   className="bg-[#7960D8]"
                 >
-                  Start Camera Preview
+                  Activate Camera Stream
                 </Button>
               </div>
             )}
 
             {/* Overlaid Badges */}
-            {cameraActive && (
+            {hasLocalVideo && !isVideoDisabled && (
               <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
                 <span className="px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md text-[11px] font-bold text-white flex items-center gap-1.5 pointer-events-auto">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   Your Camera (1080p Crystal Clear)
                 </span>
                 <button
-                  onClick={() => setIsMirrored(!isMirrored)}
+                  onClick={toggleMirror}
                   className="px-2.5 py-1 rounded-lg bg-black/70 hover:bg-black/90 backdrop-blur-md text-[11px] font-bold text-slate-200 pointer-events-auto flex items-center gap-1 border border-white/10"
                   title="Toggle selfie mirror"
                 >
                   <Repeat className="w-3.5 h-3.5" />
-                  <span>{isMirrored ? 'Mirrored' : 'Normal'}</span>
+                  <span>{isLocalMirrored ? 'Mirrored' : 'Normal'}</span>
                 </button>
               </div>
             )}
@@ -413,19 +620,28 @@ export function ReceiveCallsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div className="flex items-center gap-2">
               <Button
-                variant={cameraActive ? 'outline' : 'primary'}
+                variant={hasLocalVideo && !isVideoDisabled ? 'outline' : 'primary'}
                 size="sm"
-                icon={cameraActive ? VideoOff : Video}
-                onClick={cameraActive ? stopCameraPreview : startCameraPreview}
+                icon={isVideoDisabled ? Video : VideoOff}
+                onClick={toggleVideo}
                 className="text-xs"
               >
-                {cameraActive ? 'Pause Preview' : 'Turn Camera On'}
+                {isVideoDisabled ? 'Turn Video On' : 'Pause Camera'}
+              </Button>
+              <Button
+                variant={isAudioMuted ? 'outline' : 'secondary'}
+                size="sm"
+                icon={isAudioMuted ? MicOff : Mic}
+                onClick={toggleAudio}
+                className="text-xs"
+              >
+                {isAudioMuted ? 'Unmute Mic' : 'Mute Mic'}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 icon={Repeat}
-                onClick={() => setIsMirrored(!isMirrored)}
+                onClick={toggleMirror}
                 className="text-xs"
               >
                 Flip Mirror
@@ -549,20 +765,16 @@ export function ReceiveCallsPage() {
                     <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                     Cost to You:
                   </span>
-                  <span className="font-mono font-black text-emerald-400 text-sm">₹0.00 (100% FREE)</span>
+                  <span className="text-emerald-400 font-black">₹0.00 (100% Free)</span>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-300">
-                  <span>Caller pays:</span>
-                  <span className="font-mono font-bold text-white">₹7.00/min</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-emerald-400 font-bold border-t border-emerald-500/20 pt-1">
-                  <span>Your earning rate:</span>
-                  <span className="font-mono text-emerald-300">₹4.90/min (70%)</span>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300">Earnings Credited:</span>
+                  <span className="text-[#FF6347] font-bold">70% revenue share</span>
                 </div>
               </div>
 
-              <div className="text-[11px] text-slate-400 font-mono">
-                Auto-declines in <strong className="text-amber-400">{ringCountdown}s</strong>
+              <div className="text-[11px] text-slate-400">
+                Auto-declines in <strong className="text-white font-mono">{ringCountdown}s</strong>
               </div>
             </div>
 
@@ -570,18 +782,18 @@ export function ReceiveCallsPage() {
             <div className="grid grid-cols-2 gap-4 pt-2">
               <button
                 onClick={handleDeclineCall}
-                className="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                className="py-4 rounded-2xl bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-300 font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                <X className="w-4 h-4 text-rose-400" />
+                <X className="w-4 h-4" />
                 <span>Decline</span>
               </button>
 
               <button
                 onClick={handleAcceptCall}
-                className="py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 transition-transform active:scale-95 cursor-pointer"
+                className="py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/40 transition-all cursor-pointer animate-pulse"
               >
-                <PhoneCall className="w-4 h-4 animate-bounce" />
-                <span>Accept Free Call</span>
+                <PhoneCall className="w-4 h-4 text-slate-950" />
+                <span>Accept Call</span>
               </button>
             </div>
           </div>
@@ -590,5 +802,3 @@ export function ReceiveCallsPage() {
     </div>
   );
 }
-
-export default ReceiveCallsPage;

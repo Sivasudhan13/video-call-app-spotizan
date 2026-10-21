@@ -30,6 +30,10 @@ export function getSocket() {
 
 export function connectSocket() {
   const socket = getSocket();
+  const token = typeof window !== 'undefined' ? localStorage.getItem('spotizan_token') : null;
+  if (token && socket.auth) {
+    socket.auth.token = token;
+  }
   if (!socket.connected) {
     socket.connect();
   }

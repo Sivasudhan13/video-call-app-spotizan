@@ -247,7 +247,10 @@ export function initializeSocketServer(httpServer) {
 
     // 3. WebRTC Signaling Relay (Offer, Answer, ICE Candidate)
     socket.on('call:signal', ({ sessionId, signal }) => {
-      const session = matchmakingQueue.getSession(sessionId);
+      let session = sessionId ? matchmakingQueue.getSession(sessionId) : null;
+      if (!session) {
+        session = matchmakingQueue.getSessionBySocketId(socket.id);
+      }
       if (!session) {
         return socket.emit('call:error', {
           code: 'SESSION_NOT_FOUND',
@@ -269,7 +272,7 @@ export function initializeSocketServer(httpServer) {
       const targetSocketId = isCaller ? session.receiver.socketId : session.caller.socketId;
 
       io.to(targetSocketId).emit('call:signal', {
-        sessionId,
+        sessionId: session.sessionId,
         signal,
       });
     });

@@ -41,6 +41,8 @@ export function useWebRTC() {
   const adminPeerConnectionsRef = useRef({});
   const timerRef = useRef(null);
   const iceServersRef = useRef([{ urls: 'stun:stun.l.google.com:19302' }]);
+  const sessionIdRef = useRef(null);
+  const pendingCandidatesRef = useRef([]);
 
   // Load ICE servers on mount
   useEffect(() => {
@@ -57,30 +59,44 @@ export function useWebRTC() {
 
   const [callMode, setCallMode] = useState('VIDEO'); // 'VIDEO' | 'AUDIO'
 
-  // Request media devices with Crystal Clear HD settings
+  // Request media devices with Crystal Clear HD settings & graceful compatibility fallback
   const initLocalStream = async (mode = 'VIDEO') => {
-    if (localStreamRef.current) {
+    if (localStreamRef.current && localStreamRef.current.active) {
       if (localVideoRef.current && mode === 'VIDEO') {
         localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch(() => {});
       }
       return localStreamRef.current;
     }
 
     try {
-      const constraints =
-        mode === 'AUDIO'
-          ? { video: false, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
-          : {
-              video: {
-                width: { ideal: 1920, min: 1280 },
-                height: { ideal: 1080, min: 720 },
-                frameRate: { ideal: 30, max: 60 },
-                facingMode: 'user',
-              },
-              audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-            };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      if (mode === 'AUDIO') {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: false,
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      } else {
+        try {
+          // Attempt optimal 720p/1080p stream first
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 },
+              facingMode: 'user',
+            },
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          });
+        } catch (hdErr) {
+          console.warn('Optimal HD video constraints unavailable, falling back to standard video/audio:', hdErr);
+          // Graceful fallback: basic video and audio supported by any webcam/laptop/phone
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+        }
+      }
 
       localStreamRef.current = stream;
       setLocalStream(stream);
@@ -91,6 +107,7 @@ export function useWebRTC() {
       }
       return stream;
     } catch (err) {
+      console.error('Camera/Microphone access error:', err);
       setErrorMessage(
         mode === 'AUDIO'
           ? 'Microphone access was denied or is unavailable.'
@@ -104,8 +121,10 @@ export function useWebRTC() {
   // Create RTCPeerConnection and bind event handlers
   const createPeerConnection = (currentSessionId) => {
     if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
+      try { peerConnectionRef.current.close(); } catch (e) {}
     }
+
+    pendingCandidatesRef.current = [];
 
     const pc = new RTCPeerConnection({
       iceServers: iceServersRef.current,
@@ -121,10 +140,20 @@ export function useWebRTC() {
       });
     }
 
-    // Handle remote track
+    // Handle remote track with robust track & stream binding
     pc.ontrack = (event) => {
+      let stream = null;
       if (event.streams && event.streams[0]) {
-        const stream = event.streams[0];
+        stream = event.streams[0];
+      } else if (event.track) {
+        if (!remoteStreamRef.current) {
+          remoteStreamRef.current = new MediaStream();
+        }
+        remoteStreamRef.current.addTrack(event.track);
+        stream = remoteStreamRef.current;
+      }
+
+      if (stream) {
         remoteStreamRef.current = stream;
         setRemoteStream(stream);
         setHasRemoteVideo(true);
@@ -143,10 +172,13 @@ export function useWebRTC() {
     // Handle local ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('call:signal', {
-          sessionId: currentSessionId,
-          signal: { type: 'candidate', candidate: event.candidate },
-        });
+        const sid = currentSessionId || sessionIdRef.current;
+        if (sid) {
+          socket.emit('call:signal', {
+            sessionId: sid,
+            signal: { type: 'candidate', candidate: event.candidate },
+          });
+        }
       }
     };
 
@@ -277,6 +309,7 @@ export function useWebRTC() {
       isFreeForReceiver: freeReceiver,
       maxDurationSeconds: maxDur,
     }) => {
+      sessionIdRef.current = newSessionId;
       setSessionId(newSessionId);
       setPartner(newPartner);
       setIsInitiator(initiator);
@@ -286,6 +319,11 @@ export function useWebRTC() {
       setIsFreeForReceiver(Boolean(freeReceiver));
       if (maxDur) setMaxFreeDuration(maxDur);
       setStatus('CONNECTING');
+
+      // Ensure local camera is active and tracks ready before peer connection
+      try {
+        await initLocalStream(callMode);
+      } catch (e) {}
 
       const pc = createPeerConnection(newSessionId);
 
@@ -304,27 +342,55 @@ export function useWebRTC() {
       }
     };
 
-    // Signaling relay (Offer, Answer, Candidate)
-    const handleCallSignal = async ({ signal }) => {
+    // Signaling relay (Offer, Answer, Candidate) with candidate buffering & session recovery
+    const handleCallSignal = async ({ sessionId: incomingSessionId, signal }) => {
       const pc = peerConnectionRef.current;
-      if (!pc) return;
+      if (!pc || !signal) return;
+
+      const sid = incomingSessionId || sessionIdRef.current || sessionId;
+      if (incomingSessionId && !sessionIdRef.current) {
+        sessionIdRef.current = incomingSessionId;
+        setSessionId(incomingSessionId);
+      }
 
       try {
         if (signal.type === 'offer') {
           await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
+
+          // Flush any early candidates buffered before remoteDescription was set
+          while (pendingCandidatesRef.current.length > 0) {
+            const cand = pendingCandidatesRef.current.shift();
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (candErr) {}
+          }
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           socket.emit('call:signal', {
-            sessionId,
+            sessionId: sid,
             signal: { type: 'answer', sdp: answer.sdp },
           });
         } else if (signal.type === 'answer') {
           await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
+
+          // Flush any early candidates
+          while (pendingCandidatesRef.current.length > 0) {
+            const cand = pendingCandidatesRef.current.shift();
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (candErr) {}
+          }
         } else if (signal.type === 'candidate' && signal.candidate) {
-          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          if (!pc.remoteDescription) {
+            // Buffer candidate until remote description is set
+            pendingCandidatesRef.current.push(signal.candidate);
+          } else {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          }
         }
       } catch (err) {
-        // Handle race conditions during ICE negotiation
+        console.warn('WebRTC signaling negotiation note:', err);
       }
     };
 
