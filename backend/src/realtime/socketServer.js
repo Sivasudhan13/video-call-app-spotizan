@@ -79,6 +79,7 @@ export function initializeSocketServer(httpServer) {
         displayName: user.displayName,
         avatarUrl: user.avatarUrl || '',
         role: user.role,
+        gender: user.gender || 'FEMALE',
         isAdult: user.isAdult,
         isPremium: Boolean(user.isPremium),
         subscriptionTier: user.subscriptionTier || 'FREE',
@@ -93,9 +94,9 @@ export function initializeSocketServer(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    logger.info(`Socket connected: ${socket.id} (User: ${socket.user.displayName})`);
+    logger.info(`Socket connected: ${socket.id} (User: ${socket.user.displayName}, Gender: ${socket.user.gender})`);
 
-    // 1. Join Random Matchmaking Queue
+    // 1. Join Random Matchmaking Queue (Caller or Receiver)
     socket.on('queue:join', async (payload = {}) => {
       try {
         const preferences = {
@@ -103,11 +104,15 @@ export function initializeSocketServer(httpServer) {
           interests: payload.interests || [],
         };
 
+        const mode = payload.mode || (socket.user.gender === 'FEMALE' ? 'RECEIVE' : 'CALL');
+
         const match = await matchmakingQueue.addToQueue({
           socketId: socket.id,
           userId: socket.user._id,
           displayName: socket.user.displayName,
           avatarUrl: socket.user.avatarUrl,
+          gender: socket.user.gender,
+          mode: mode,
           languages: preferences.languages,
           interests: preferences.interests,
           isPremium: socket.user.isPremium,
@@ -140,26 +145,29 @@ export function initializeSocketServer(httpServer) {
           });
 
           // Join socket rooms
-          socket.join(match.sessionId);
+          io.sockets.sockets.get(match.caller.socketId)?.join(match.sessionId);
           io.sockets.sockets.get(match.receiver.socketId)?.join(match.sessionId);
 
           // Inform Caller (Initiator)
-          socket.emit('match:found', {
+          io.to(match.caller.socketId).emit('match:found', {
             sessionId: match.sessionId,
             isInitiator: true,
             partner: {
               userId: match.receiver.userId,
               displayName: match.receiver.displayName,
               avatarUrl: match.receiver.avatarUrl,
+              gender: match.receiver.gender,
               languages: match.receiver.languages,
             },
             isFreeCall: isFreeCall,
+            isFreeForReceiver: false,
             maxDurationSeconds: isFreeCall ? 120 : null,
             ratePerMinutePaise: isFreeCall ? 0 : 700,
             freePreviewSeconds: isFreeCall ? 0 : 15,
           });
 
-          // Inform Receiver
+          // Inform Receiver (Girl receives the call 100% FREE with 0 charge)
+          const isGirlReceiver = match.receiver.gender === 'FEMALE' || match.isFreeForReceiver;
           io.to(match.receiver.socketId).emit('match:found', {
             sessionId: match.sessionId,
             isInitiator: false,
@@ -167,12 +175,28 @@ export function initializeSocketServer(httpServer) {
               userId: match.caller.userId,
               displayName: match.caller.displayName,
               avatarUrl: match.caller.avatarUrl,
+              gender: match.caller.gender,
               languages: match.caller.languages,
             },
-            isFreeCall: isFreeCall,
+            isFreeCall: isGirlReceiver ? true : isFreeCall,
+            isFreeForReceiver: isGirlReceiver,
             maxDurationSeconds: isFreeCall ? 120 : null,
-            ratePerMinutePaise: isFreeCall ? 0 : 700,
+            ratePerMinutePaise: isGirlReceiver ? 0 : (isFreeCall ? 0 : 700),
             freePreviewSeconds: isFreeCall ? 0 : 15,
+          });
+
+          // If receiver is listening in the female "Receive Calls" section, also send call:incoming ring
+          io.to(match.receiver.socketId).emit('call:incoming', {
+            sessionId: match.sessionId,
+            caller: {
+              userId: match.caller.userId,
+              displayName: match.caller.displayName,
+              avatarUrl: match.caller.avatarUrl,
+              gender: match.caller.gender,
+              languages: match.caller.languages,
+            },
+            ratePerMinutePaise: isGirlReceiver ? 0 : 700,
+            isFreeForReceiver: true,
           });
 
           // Server-enforced 120s limit for free calls
@@ -319,6 +343,10 @@ export function initializeSocketServer(httpServer) {
           sessionId,
           reason,
         });
+        io.to(`inspect_${sessionId}`).emit('call:ended', {
+          sessionId,
+          reason,
+        });
 
         // Update DB session record
         const sessionDoc = await CallSession.findOne({ sessionId });
@@ -351,12 +379,65 @@ export function initializeSocketServer(httpServer) {
       }
     });
 
-    // 6. Admin Stealth Safety Observation
+    // 6. Admin Live Video Call Show Observation & Real-Time Monitoring
     socket.on('admin:join_inspect', ({ sessionId }) => {
       if (socket.user?.role !== 'ADMIN') return;
       socket.join(sessionId);
       socket.join(`inspect_${sessionId}`);
-      logger.info(`Admin [${socket.user.displayName}] joined session [${sessionId}] in stealth monitoring mode.`);
+      logger.info(`Admin [${socket.user.displayName}] joined session [${sessionId}] to view live video call show.`);
+
+      const session = matchmakingQueue.getSession(sessionId);
+      if (session) {
+        // Notify admin about participants
+        socket.emit('admin:session_info', {
+          sessionId,
+          caller: {
+            userId: session.caller.userId,
+            displayName: session.caller.displayName,
+            avatarUrl: session.caller.avatarUrl,
+            gender: session.caller.gender,
+            socketId: session.caller.socketId,
+          },
+          receiver: {
+            userId: session.receiver.userId,
+            displayName: session.receiver.displayName,
+            avatarUrl: session.receiver.avatarUrl,
+            gender: session.receiver.gender,
+            socketId: session.receiver.socketId,
+          },
+        });
+
+        // Request live camera streams from both peers to show on admin screen
+        io.to(session.caller.socketId).emit('admin:stream_requested', {
+          adminSocketId: socket.id,
+          sessionId,
+          peerType: 'caller',
+        });
+        io.to(session.receiver.socketId).emit('admin:stream_requested', {
+          adminSocketId: socket.id,
+          sessionId,
+          peerType: 'receiver',
+        });
+      } else {
+        socket.emit('admin:session_not_found', { sessionId });
+      }
+    });
+
+    // WebRTC Signaling Relay between Admin and Call Participants (for live camera show)
+    socket.on('admin:signal', ({ targetSocketId, signal, sessionId, peerType }) => {
+      if (!targetSocketId || !signal) return;
+      io.to(targetSocketId).emit('admin:signal', {
+        fromSocketId: socket.id,
+        signal,
+        sessionId,
+        peerType,
+      });
+    });
+
+    socket.on('admin:leave_inspect', ({ sessionId }) => {
+      socket.leave(sessionId);
+      socket.leave(`inspect_${sessionId}`);
+      logger.info(`Admin [${socket.user.displayName}] stopped viewing session [${sessionId}].`);
     });
 
     // 7. Admin Direct Disconnect / Force Terminate Call
@@ -406,6 +487,10 @@ export function initializeSocketServer(httpServer) {
       if (cleanupResult) {
         const { sessionId, partnerSocketId } = cleanupResult;
         io.to(partnerSocketId).emit('call:ended', {
+          sessionId,
+          reason: 'PEER_DISCONNECTED',
+        });
+        io.to(`inspect_${sessionId}`).emit('call:ended', {
           sessionId,
           reason: 'PEER_DISCONNECTED',
         });

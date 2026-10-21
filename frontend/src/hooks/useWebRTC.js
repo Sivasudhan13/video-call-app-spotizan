@@ -21,12 +21,19 @@ export function useWebRTC() {
   const [messages, setMessages] = useState([]);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
 
+  const [layoutMode, setLayoutMode] = useState('GRID'); // 'GRID' (both cameras equal clear 50/50) | 'PIP' (picture-in-picture)
+  const [videoFitMode, setVideoFitMode] = useState('cover'); // 'cover' | 'contain' (no cropping)
+  const [mainVideoSource, setMainVideoSource] = useState('remote'); // 'remote' | 'local'
+  const [isLocalMirrored, setIsLocalMirrored] = useState(true);
+  const [isFreeForReceiver, setIsFreeForReceiver] = useState(false);
+
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
 
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const peerConnectionRef = useRef(null);
+  const adminPeerConnectionsRef = useRef({});
   const timerRef = useRef(null);
   const iceServersRef = useRef([{ urls: 'stun:stun.l.google.com:19302' }]);
 
@@ -45,15 +52,28 @@ export function useWebRTC() {
 
   const [callMode, setCallMode] = useState('VIDEO'); // 'VIDEO' | 'AUDIO'
 
-  // Request media devices
+  // Request media devices with Crystal Clear HD settings
   const initLocalStream = async (mode = 'VIDEO') => {
-    if (localStreamRef.current) return localStreamRef.current;
+    if (localStreamRef.current) {
+      if (localVideoRef.current && mode === 'VIDEO') {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+      return localStreamRef.current;
+    }
 
     try {
       const constraints =
         mode === 'AUDIO'
-          ? { video: false, audio: true }
-          : { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true };
+          ? { video: false, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
+          : {
+              video: {
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 },
+                frameRate: { ideal: 30, max: 60 },
+                facingMode: 'user',
+              },
+              audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+            };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
@@ -66,7 +86,7 @@ export function useWebRTC() {
       setErrorMessage(
         mode === 'AUDIO'
           ? 'Microphone access was denied or is unavailable.'
-          : 'Camera or Microphone access was denied or is unavailable.'
+          : 'Camera or Microphone access was denied or is unavailable. Please grant camera permission to start video call.'
       );
       setStatus('ERROR');
       throw err;
@@ -125,8 +145,8 @@ export function useWebRTC() {
     return pc;
   };
 
-  // Join Matchmaking Queue
-  const joinQueue = async (languages = ['English'], isFree = false, mode = 'VIDEO') => {
+  // Join Matchmaking Queue (Caller or Receiver)
+  const joinQueue = async (languages = ['English'], isFree = false, mode = 'VIDEO', queueMode = 'CALL') => {
     setErrorMessage(null);
     setStatus('QUEUE_WAITING');
     setPartner(null);
@@ -141,7 +161,7 @@ export function useWebRTC() {
       await initLocalStream(mode);
       const socket = connectSocket();
 
-      socket.emit('queue:join', { languages, isFreeCall: isFree, callMode: mode });
+      socket.emit('queue:join', { languages, isFreeCall: isFree, callMode: mode, mode: queueMode });
     } catch (err) {
       // Handled in initLocalStream
     }
@@ -164,6 +184,13 @@ export function useWebRTC() {
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
+    }
+
+    if (adminPeerConnectionsRef.current) {
+      Object.values(adminPeerConnectionsRef.current).forEach((pc) => {
+        try { pc.close(); } catch (e) {}
+      });
+      adminPeerConnectionsRef.current = {};
     }
 
     if (timerRef.current) {
@@ -202,6 +229,23 @@ export function useWebRTC() {
     }
   };
 
+  // Layout mode controls
+  const toggleLayoutMode = () => {
+    setLayoutMode((prev) => (prev === 'GRID' ? 'PIP' : 'GRID'));
+  };
+
+  const toggleVideoFit = () => {
+    setVideoFitMode((prev) => (prev === 'cover' ? 'contain' : 'cover'));
+  };
+
+  const swapVideos = () => {
+    setMainVideoSource((prev) => (prev === 'remote' ? 'local' : 'remote'));
+  };
+
+  const toggleMirror = () => {
+    setIsLocalMirrored((prev) => !prev);
+  };
+
   // Socket event binding
   useEffect(() => {
     const socket = connectSocket();
@@ -213,6 +257,7 @@ export function useWebRTC() {
       isInitiator: initiator,
       freePreviewSeconds: previewSecs,
       isFreeCall: freeCall,
+      isFreeForReceiver: freeReceiver,
       maxDurationSeconds: maxDur,
     }) => {
       setSessionId(newSessionId);
@@ -221,6 +266,7 @@ export function useWebRTC() {
       setFreePreviewSeconds(previewSecs || (freeCall ? 0 : 15));
       setIsFreePreview(!freeCall && Boolean(previewSecs));
       setIsFreeCall(Boolean(freeCall));
+      setIsFreeForReceiver(Boolean(freeReceiver));
       if (maxDur) setMaxFreeDuration(maxDur);
       setStatus('CONNECTING');
 
@@ -265,11 +311,66 @@ export function useWebRTC() {
       }
     };
 
+    // Admin Observation Live Stream Request
+    const handleAdminStreamRequested = async ({ adminSocketId, sessionId: reqSessionId, peerType }) => {
+      if (!localStreamRef.current) return;
+      try {
+        const adminPc = new RTCPeerConnection({ iceServers: iceServersRef.current });
+        adminPeerConnectionsRef.current[adminSocketId] = adminPc;
+
+        localStreamRef.current.getTracks().forEach((track) => {
+          adminPc.addTrack(track, localStreamRef.current);
+        });
+
+        adminPc.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit('admin:signal', {
+              targetSocketId: adminSocketId,
+              signal: { type: 'candidate', candidate: event.candidate },
+              sessionId: reqSessionId || sessionId,
+              peerType: peerType || (isInitiator ? 'caller' : 'receiver'),
+            });
+          }
+        };
+
+        const offer = await adminPc.createOffer();
+        await adminPc.setLocalDescription(offer);
+        socket.emit('admin:signal', {
+          targetSocketId: adminSocketId,
+          signal: { type: 'offer', sdp: offer.sdp },
+          sessionId: reqSessionId || sessionId,
+          peerType: peerType || (isInitiator ? 'caller' : 'receiver'),
+        });
+      } catch (err) {
+        console.warn('Failed to stream video to admin inspection studio:', err);
+      }
+    };
+
+    const handleAdminSignal = async ({ signal, fromSocketId }) => {
+      const pc = adminPeerConnectionsRef.current[fromSocketId];
+      if (!pc) return;
+      try {
+        if (signal.type === 'answer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal));
+        } else if (signal.type === 'candidate' && signal.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+        }
+      } catch (err) {
+        // Handled
+      }
+    };
+
     const handleCallEnded = ({ reason }) => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
+      }
+      if (adminPeerConnectionsRef.current) {
+        Object.values(adminPeerConnectionsRef.current).forEach((pc) => {
+          try { pc.close(); } catch (e) {}
+        });
+        adminPeerConnectionsRef.current = {};
       }
       setStatus('ENDED');
       if (reason === 'PEER_DISCONNECTED') {
@@ -294,6 +395,8 @@ export function useWebRTC() {
 
     socket.on('match:found', handleMatchFound);
     socket.on('call:signal', handleCallSignal);
+    socket.on('admin:stream_requested', handleAdminStreamRequested);
+    socket.on('admin:signal', handleAdminSignal);
     socket.on('call:ended', handleCallEnded);
     socket.on('chat:message', handleChatMessage);
     socket.on('chat:sent', handleChatSent);
@@ -302,12 +405,14 @@ export function useWebRTC() {
     return () => {
       socket.off('match:found', handleMatchFound);
       socket.off('call:signal', handleCallSignal);
+      socket.off('admin:stream_requested', handleAdminStreamRequested);
+      socket.off('admin:signal', handleAdminSignal);
       socket.off('call:ended', handleCallEnded);
       socket.off('chat:message', handleChatMessage);
       socket.off('chat:sent', handleChatSent);
       socket.off('chat:typing', handleChatTyping);
     };
-  }, [sessionId]);
+  }, [sessionId, isInitiator]);
 
   // Send Chat Message
   const sendMessage = useCallback((text) => {
@@ -408,6 +513,21 @@ export function useWebRTC() {
     skipToNext,
     toggleAudio,
     toggleVideo,
+    // Layout & Dual Camera Clarity
+    layoutMode,
+    setLayoutMode,
+    toggleLayoutMode,
+    videoFitMode,
+    setVideoFitMode,
+    toggleVideoFit,
+    mainVideoSource,
+    setMainVideoSource,
+    swapVideos,
+    isLocalMirrored,
+    setIsLocalMirrored,
+    toggleMirror,
+    isFreeForReceiver,
+    initLocalStream,
     // Chat & Moderation
     messages,
     isPartnerTyping,

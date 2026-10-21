@@ -36,8 +36,10 @@ import {
   LogOut,
   Maximize2,
   VolumeX,
+  Volume2,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { connectSocket, getSocket } from '../services/socket';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -73,10 +75,111 @@ export function AdminDashboardPage() {
   // Overview stats (Real MongoDB Aggregation)
   const [overview, setOverview] = useState(null);
 
-  // Live Active Calls (Stealth Safety View)
+  // Live Active Calls (Stealth Safety View & Real Live Video Monitoring)
   const [activeCalls, setActiveCalls] = useState([]);
   const [inspectingSession, setInspectingSession] = useState(null);
   const [moderationReason, setModerationReason] = useState('Terms of consensual adult service violation');
+
+  // Live Video Call Show Observation State
+  const adminCallerVideoRef = useRef(null);
+  const adminReceiverVideoRef = useRef(null);
+  const adminPcsRef = useRef({ caller: null, receiver: null });
+  const [adminStreamStatus, setAdminStreamStatus] = useState({ caller: 'connecting', receiver: 'connecting' });
+  const [adminAudioMuted, setAdminAudioMuted] = useState(true);
+
+  // Live Video Call Show WebRTC Observation Listener
+  useEffect(() => {
+    if (!inspectingSession) {
+      if (adminPcsRef.current.caller) {
+        adminPcsRef.current.caller.close();
+        adminPcsRef.current.caller = null;
+      }
+      if (adminPcsRef.current.receiver) {
+        adminPcsRef.current.receiver.close();
+        adminPcsRef.current.receiver = null;
+      }
+      setAdminStreamStatus({ caller: 'connecting', receiver: 'connecting' });
+      return;
+    }
+
+    const socket = connectSocket();
+    socket.emit('admin:join_inspect', { sessionId: inspectingSession.sessionId });
+
+    const handleAdminSignal = async ({ signal, fromSocketId, peerType }) => {
+      const type = peerType || 'caller';
+      try {
+        let pc = adminPcsRef.current[type];
+        if (!pc || pc.signalingState === 'closed') {
+          pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+          });
+          adminPcsRef.current[type] = pc;
+
+          pc.ontrack = (event) => {
+            if (event.streams && event.streams[0]) {
+              const videoEl = type === 'caller' ? adminCallerVideoRef.current : adminReceiverVideoRef.current;
+              if (videoEl) {
+                videoEl.srcObject = event.streams[0];
+                videoEl.play().catch(() => {});
+              }
+              setAdminStreamStatus((prev) => ({ ...prev, [type]: 'connected' }));
+            }
+          };
+
+          pc.onicecandidate = (event) => {
+            if (event.candidate) {
+              socket.emit('admin:signal', {
+                targetSocketId: fromSocketId,
+                signal: { type: 'candidate', candidate: event.candidate },
+                sessionId: inspectingSession.sessionId,
+                peerType: type,
+              });
+            }
+          };
+        }
+
+        if (signal.type === 'offer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit('admin:signal', {
+            targetSocketId: fromSocketId,
+            signal: { type: 'answer', sdp: answer.sdp },
+            sessionId: inspectingSession.sessionId,
+            peerType: type,
+          });
+        } else if (signal.type === 'candidate' && signal.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+        }
+      } catch (err) {
+        console.warn('Admin live stream negotiation notice:', err);
+      }
+    };
+
+    const handleObservedCallEnded = ({ sessionId }) => {
+      if (sessionId === inspectingSession.sessionId) {
+        setSuccessMsg('The observed video call has ended.');
+        setInspectingSession(null);
+      }
+    };
+
+    socket.on('admin:signal', handleAdminSignal);
+    socket.on('call:ended', handleObservedCallEnded);
+
+    return () => {
+      socket.emit('admin:leave_inspect', { sessionId: inspectingSession.sessionId });
+      socket.off('admin:signal', handleAdminSignal);
+      socket.off('call:ended', handleObservedCallEnded);
+      if (adminPcsRef.current.caller) {
+        adminPcsRef.current.caller.close();
+        adminPcsRef.current.caller = null;
+      }
+      if (adminPcsRef.current.receiver) {
+        adminPcsRef.current.receiver.close();
+        adminPcsRef.current.receiver = null;
+      }
+    };
+  }, [inspectingSession]);
 
   // Real Users Management state
   const [usersList, setUsersList] = useState([]);
@@ -733,93 +836,123 @@ export function AdminDashboardPage() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h3 className="font-black text-base">Stealth Video Observation Studio</h3>
+                            <h3 className="font-black text-base">Live Video Call Observation Studio</h3>
                             <Badge variant="adult" className="text-[10px] py-0 px-2 bg-emerald-500 text-white border-none">
-                              SILENT MODE
+                              REAL-TIME P2P WEBRTC
                             </Badge>
                           </div>
                           <p className="text-[11px] text-gray-300">
-                            Neither participant can see or hear you. Live safety inspection active.
+                            Admin live camera monitor: viewing real-time video stream of both caller and receiver.
                           </p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setInspectingSession(null)}
-                        className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setAdminAudioMuted(!adminAudioMuted)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                            adminAudioMuted
+                              ? 'bg-white/10 hover:bg-white/20 text-gray-300'
+                              : 'bg-[#218A58] text-white shadow-md'
+                          }`}
+                          title={adminAudioMuted ? 'Listen in to audio' : 'Mute audio monitor'}
+                        >
+                          {adminAudioMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                          <span>{adminAudioMuted ? 'Listen Audio' : 'Mute Audio'}</span>
+                        </button>
+                        <button
+                          onClick={() => setInspectingSession(null)}
+                          className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Modal Dual Video Feeds */}
-                    <div className="p-6 overflow-y-auto space-y-6 flex-1">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Caller Feed Card */}
-                        <div className="rounded-2xl bg-black border border-gray-800 p-3 text-white space-y-3">
-                          <div className="flex items-center justify-between text-xs pb-2 border-b border-gray-800">
-                            <span className="font-bold text-[#B9A7F5]">Caller (Peer 1)</span>
-                            <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                              Video Transmitting
-                            </span>
-                          </div>
-                          {/* Simulated Live Stream Preview Canvas */}
-                          <div className="relative aspect-video rounded-xl bg-gray-900 overflow-hidden flex items-center justify-center border border-gray-800">
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 z-10" />
-                            <div className="text-center z-20 space-y-2">
-                              <div className="w-14 h-14 rounded-full bg-[#7960D8] text-white flex items-center justify-center text-xl font-black mx-auto shadow-lg">
-                                {inspectingSession.callerId?.displayName?.charAt(0).toUpperCase() || 'C'}
-                              </div>
-                              <div className="font-bold text-sm text-white">
-                                {inspectingSession.callerId?.displayName}
-                              </div>
-                              <span className="px-2 py-0.5 rounded text-[10px] bg-white/20 text-white font-mono">
-                                Gender: {inspectingSession.callerId?.gender || 'MALE'}
+                      {/* Modal Dual Video Feeds */}
+                      <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Caller Feed Card */}
+                          <div className="rounded-2xl bg-black border border-gray-800 p-3 text-white space-y-3">
+                            <div className="flex items-center justify-between text-xs pb-2 border-b border-gray-800">
+                              <span className="font-bold text-[#B9A7F5]">Caller (Peer 1): {inspectingSession.callerId?.displayName}</span>
+                              <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                {adminStreamStatus.caller === 'connected' ? 'Live Camera Feed' : 'Connecting Stream...'}
                               </span>
                             </div>
-                            <div className="absolute bottom-2 left-2 z-20 text-[10px] text-gray-400 font-mono">
-                              Live Stream Feed [Peer_A]
+                            {/* Real Live Camera Video Element */}
+                            <div className="relative aspect-video rounded-xl bg-gray-900 overflow-hidden flex items-center justify-center border border-gray-800">
+                              <video
+                                ref={adminCallerVideoRef}
+                                autoPlay
+                                playsInline
+                                muted={adminAudioMuted}
+                                className={`w-full h-full object-cover ${adminStreamStatus.caller === 'connected' ? 'block' : 'hidden'}`}
+                              />
+                              {adminStreamStatus.caller !== 'connected' && (
+                                <div className="text-center z-20 space-y-2 p-4">
+                                  <div className="w-14 h-14 rounded-full bg-[#7960D8] text-white flex items-center justify-center text-xl font-black mx-auto shadow-lg animate-pulse">
+                                    {inspectingSession.callerId?.displayName?.charAt(0).toUpperCase() || 'C'}
+                                  </div>
+                                  <div className="font-bold text-sm text-white">
+                                    {inspectingSession.callerId?.displayName}
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded text-[10px] bg-white/20 text-white font-mono">
+                                    Connecting Live Camera Stream...
+                                  </span>
+                                </div>
+                              )}
+                              <div className="absolute bottom-2 left-2 z-20 text-[10px] bg-black/70 px-2 py-0.5 rounded text-gray-300 font-mono">
+                                Caller Live Video • {inspectingSession.callerId?.displayName}
+                              </div>
+                            </div>
+                            <div className="text-xs text-gray-400 space-y-1">
+                              <div>Email: <strong className="text-white">{inspectingSession.callerId?.email}</strong></div>
+                              <div>Role: <strong className="text-[#B9A7F5]">{inspectingSession.callerId?.role}</strong> • Gender: <strong className="text-white">{inspectingSession.callerId?.gender || 'MALE'}</strong></div>
                             </div>
                           </div>
-                          <div className="text-xs text-gray-400 space-y-1">
-                            <div>Email: <strong className="text-white">{inspectingSession.callerId?.email}</strong></div>
-                            <div>Role: <strong className="text-[#B9A7F5]">{inspectingSession.callerId?.role}</strong></div>
-                          </div>
-                        </div>
 
-                        {/* Receiver Feed Card */}
-                        <div className="rounded-2xl bg-black border border-gray-800 p-3 text-white space-y-3">
-                          <div className="flex items-center justify-between text-xs pb-2 border-b border-gray-800">
-                            <span className="font-bold text-[#FF6347]">Receiver (Peer 2)</span>
-                            <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                              Video Transmitting
-                            </span>
-                          </div>
-                          {/* Simulated Live Stream Preview Canvas */}
-                          <div className="relative aspect-video rounded-xl bg-gray-900 overflow-hidden flex items-center justify-center border border-gray-800">
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 z-10" />
-                            <div className="text-center z-20 space-y-2">
-                              <div className="w-14 h-14 rounded-full bg-[#FF6347] text-white flex items-center justify-center text-xl font-black mx-auto shadow-lg">
-                                {inspectingSession.receiverId?.displayName?.charAt(0).toUpperCase() || 'R'}
-                              </div>
-                              <div className="font-bold text-sm text-white">
-                                {inspectingSession.receiverId?.displayName}
-                              </div>
-                              <span className="px-2 py-0.5 rounded text-[10px] bg-white/20 text-white font-mono">
-                                Gender: {inspectingSession.receiverId?.gender || 'FEMALE'}
+                          {/* Receiver Feed Card */}
+                          <div className="rounded-2xl bg-black border border-gray-800 p-3 text-white space-y-3">
+                            <div className="flex items-center justify-between text-xs pb-2 border-b border-gray-800">
+                              <span className="font-bold text-[#FF6347]">Receiver (Peer 2): {inspectingSession.receiverId?.displayName}</span>
+                              <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                {adminStreamStatus.receiver === 'connected' ? 'Live Camera Feed' : 'Connecting Stream...'}
                               </span>
                             </div>
-                            <div className="absolute bottom-2 left-2 z-20 text-[10px] text-gray-400 font-mono">
-                              Live Stream Feed [Peer_B]
+                            {/* Real Live Camera Video Element */}
+                            <div className="relative aspect-video rounded-xl bg-gray-900 overflow-hidden flex items-center justify-center border border-gray-800">
+                              <video
+                                ref={adminReceiverVideoRef}
+                                autoPlay
+                                playsInline
+                                muted={adminAudioMuted}
+                                className={`w-full h-full object-cover ${adminStreamStatus.receiver === 'connected' ? 'block' : 'hidden'}`}
+                              />
+                              {adminStreamStatus.receiver !== 'connected' && (
+                                <div className="text-center z-20 space-y-2 p-4">
+                                  <div className="w-14 h-14 rounded-full bg-[#FF6347] text-white flex items-center justify-center text-xl font-black mx-auto shadow-lg animate-pulse">
+                                    {inspectingSession.receiverId?.displayName?.charAt(0).toUpperCase() || 'R'}
+                                  </div>
+                                  <div className="font-bold text-sm text-white">
+                                    {inspectingSession.receiverId?.displayName}
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded text-[10px] bg-white/20 text-white font-mono">
+                                    Connecting Live Camera Stream...
+                                  </span>
+                                </div>
+                              )}
+                              <div className="absolute bottom-2 left-2 z-20 text-[10px] bg-black/70 px-2 py-0.5 rounded text-gray-300 font-mono">
+                                Receiver Live Video • {inspectingSession.receiverId?.displayName}
+                              </div>
+                            </div>
+                            <div className="text-xs text-gray-400 space-y-1">
+                              <div>Email: <strong className="text-white">{inspectingSession.receiverId?.email}</strong></div>
+                              <div>Role: <strong className="text-[#FF6347]">{inspectingSession.receiverId?.role}</strong> • Gender: <strong className="text-pink-400 font-bold">{inspectingSession.receiverId?.gender || 'FEMALE'}</strong></div>
                             </div>
                           </div>
-                          <div className="text-xs text-gray-400 space-y-1">
-                            <div>Email: <strong className="text-white">{inspectingSession.receiverId?.email}</strong></div>
-                            <div>Role: <strong className="text-[#FF6347]">{inspectingSession.receiverId?.role}</strong></div>
-                          </div>
                         </div>
-                      </div>
 
                       {/* Direct Moderation Control Box */}
                       <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-3">

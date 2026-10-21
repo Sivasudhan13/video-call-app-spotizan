@@ -15,6 +15,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { CreatorDashboardPage } from './pages/CreatorDashboardPage';
 import { CreatorProfilePage } from './pages/CreatorProfilePage';
+import { ReceiveCallsPage } from './pages/ReceiveCallsPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
 import { PremiumPage } from './pages/PremiumPage';
@@ -40,6 +41,14 @@ export function App() {
             <Route path="/random-call" element={<QueuePage />} />
             <Route path="/queue" element={<QueuePage />} />
             <Route path="/call/:sessionId" element={<QueuePage />} />
+            <Route
+              path="/receive-calls"
+              element={
+                <ProtectedRoute>
+                  <ReceiveCallsPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/profile/:id" element={<CreatorProfilePage />} />
             <Route path="/creator/:id" element={<CreatorProfilePage />} />
             <Route

@@ -114,15 +114,27 @@ export class MatchmakingQueue {
 
       const sessionId = crypto.randomUUID();
 
+      // Ensure female users or users in RECEIVE mode are assigned as receiver (receives call free)
+      let callerUser = candidate;
+      let receiverUser = peer;
+      if (candidate.mode === 'RECEIVE' || (candidate.gender === 'FEMALE' && peer.gender !== 'FEMALE')) {
+        callerUser = peer;
+        receiverUser = candidate;
+      } else if (peer.mode === 'RECEIVE' || (peer.gender === 'FEMALE' && candidate.gender !== 'FEMALE')) {
+        callerUser = candidate;
+        receiverUser = peer;
+      }
+
       const session = {
         sessionId,
-        caller: candidate,
-        receiver: peer,
+        caller: callerUser,
+        receiver: receiverUser,
+        isFreeForReceiver: receiverUser.gender === 'FEMALE' || receiverUser.mode === 'RECEIVE',
         createdAt: Date.now(),
       };
 
       this.activeSessions.set(sessionId, session);
-      logger.info(`Match created [${sessionId}]: ${candidate.displayName} <-> ${peer.displayName}`);
+      logger.info(`Match created [${sessionId}]: Caller(${callerUser.displayName}) -> Receiver(${receiverUser.displayName}, Free: ${session.isFreeForReceiver})`);
 
       return session;
     }

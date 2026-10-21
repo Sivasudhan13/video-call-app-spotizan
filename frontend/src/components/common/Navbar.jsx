@@ -34,6 +34,9 @@ export function Navbar() {
     { name: 'Random Queue', href: '/queue' },
     { name: 'Premium', href: '/premium' },
     { name: 'Pricing & Rates', href: '/pricing' },
+    ...(user?.gender === 'FEMALE' || user?.role === 'CREATOR'
+      ? [{ name: 'Receive Calls (Free)', href: '/receive-calls', isHighlight: true }]
+      : []),
     ...(user?.role === 'CREATOR' && user?.gender !== 'MALE' ? [{ name: 'Creator Studio', href: '/creator/dashboard' }] : []),
     ...(user?.role === 'ADMIN' ? [{ name: 'Admin Console', href: '/admin' }] : []),
   ];
@@ -71,12 +74,15 @@ export function Navbar() {
               <Link
                 key={link.name}
                 to={link.href}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
                   isActive(link.href)
                     ? 'text-[#7960D8] bg-[#F1EDFF] font-semibold'
+                    : link.isHighlight
+                    ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-bold border border-emerald-200 shadow-sm'
                     : 'text-[#777387] hover:text-[#27243A] hover:bg-[#F1EDFF]'
                 }`}
               >
+                {link.isHighlight && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
                 {link.name}
               </Link>
             ))}
@@ -206,12 +212,15 @@ export function Navbar() {
                 key={link.name}
                 to={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-3 py-2 rounded-lg text-base font-medium ${
+                className={`block px-3 py-2 rounded-lg text-base font-medium flex items-center gap-2 ${
                   isActive(link.href)
                     ? 'text-[#7960D8] bg-[#F1EDFF] font-semibold'
+                    : link.isHighlight
+                    ? 'text-emerald-700 bg-emerald-50 font-bold border border-emerald-200'
                     : 'text-[#777387] hover:text-[#27243A] hover:bg-[#F1EDFF]'
                 }`}
               >
+                {link.isHighlight && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
                 {link.name}
               </Link>
             ))}

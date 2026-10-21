@@ -26,10 +26,18 @@ import {
   Flag,
   CheckCircle2,
   Gift,
+  LayoutGrid,
+  Layers,
+  Maximize2,
+  Minimize2,
+  Repeat,
+  Camera,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { useWallet } from '../context/WalletContext';
 
 export function QueuePage() {
+  const { user } = useAuth();
   const { wallet, openWalletModal } = useWallet();
   const {
     status,
@@ -51,6 +59,16 @@ export function QueuePage() {
     skipToNext,
     toggleAudio,
     toggleVideo,
+    // Dual Camera Controls
+    layoutMode,
+    toggleLayoutMode,
+    videoFitMode,
+    toggleVideoFit,
+    isLocalMirrored,
+    toggleMirror,
+    mainVideoSource,
+    swapVideos,
+    isFreeForReceiver,
     messages,
     isPartnerTyping,
     sendMessage,
@@ -131,7 +149,7 @@ export function QueuePage() {
       {/* Active Call Mode */}
       {isCallActive ? (
         <div className="relative w-full h-[calc(100vh-4rem)] flex items-center justify-center bg-black">
-          {/* Active Stream: Voice Call Pulse vs Full Video */}
+          {/* Active Stream: Voice Call Pulse vs Dual Video Split / Grid Mode */}
           {callMode === 'AUDIO' ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-slate-950 via-[#181136] to-slate-950 p-6 text-center z-10">
               <div className="relative mb-6">
@@ -151,24 +169,169 @@ export function QueuePage() {
                 <span>Use the message button below to chat in real time</span>
               </div>
             </div>
-          ) : (
-            <>
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-cover"
-              />
-
-              {/* Fallback if remote video hasn't rendered tracks yet */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-none -z-0">
-                <div className="w-24 h-24 rounded-3xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-3xl font-extrabold text-indigo-300 shadow-2xl mb-4">
-                  {partner?.displayName?.charAt(0).toUpperCase() || 'P'}
+          ) : layoutMode === 'GRID' ? (
+            /* DUAL CAMERA GRID (50/50 CLEAR SPLIT SCREEN - BOTH CAMERAS FULLY VISIBLE) */
+            <div className="w-full h-full p-3 sm:p-5 pt-20 pb-28 grid grid-cols-1 md:grid-cols-2 gap-4 items-center justify-center max-w-7xl mx-auto">
+              {/* Partner's Camera Pane */}
+              <div className="relative w-full h-full min-h-[260px] sm:min-h-[380px] bg-slate-900/90 rounded-3xl overflow-hidden border-2 border-indigo-500/40 shadow-2xl flex items-center justify-center group">
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className={`w-full h-full ${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
+                />
+                {/* Fallback if remote video hasn't rendered tracks yet */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-none -z-0">
+                  <div className="w-20 h-20 rounded-2xl bg-indigo-950/90 border border-indigo-700/60 flex items-center justify-center text-3xl font-extrabold text-indigo-300 shadow-2xl mb-3">
+                    {partner?.displayName?.charAt(0).toUpperCase() || 'P'}
+                  </div>
+                  <h3 className="text-base font-bold text-white">{partner?.displayName || 'Matched Adult Peer'}</h3>
+                  <p className="text-xs text-indigo-300 animate-pulse mt-1">Establishing encrypted WebRTC P2P stream...</p>
                 </div>
-                <h3 className="text-xl font-bold text-white">{partner?.displayName || 'Matched Adult Peer'}</h3>
-                <p className="text-xs text-indigo-300 animate-pulse mt-1">
-                  Establishing encrypted WebRTC P2P stream...
-                </p>
+
+                {/* Partner Header Tag */}
+                <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20 pointer-events-none">
+                  <div className="flex items-center gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 pointer-events-auto">
+                    <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">
+                      {partner?.displayName?.charAt(0).toUpperCase() || 'P'}
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-white block">{partner?.displayName || 'Partner'}</span>
+                      <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        Live 1080p Crystal Clear
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 pointer-events-auto">
+                    <button
+                      onClick={toggleVideoFit}
+                      className="p-1.5 rounded-lg bg-black/60 hover:bg-black/90 text-slate-300 hover:text-white border border-white/10 text-[11px] font-semibold flex items-center gap-1 backdrop-blur-md transition-colors"
+                      title="Toggle Camera Fit (No Cropping)"
+                    >
+                      {videoFitMode === 'contain' ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+                      <span className="hidden sm:inline">{videoFitMode === 'contain' ? 'Fill' : 'Fit'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Your Camera Pane */}
+              <div className="relative w-full h-full min-h-[260px] sm:min-h-[380px] bg-slate-900/90 rounded-3xl overflow-hidden border-2 border-purple-500/40 shadow-2xl flex items-center justify-center group">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full ${isLocalMirrored ? 'scale-x-[-1] ' : ''}${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'} ${isVideoDisabled ? 'hidden' : ''}`}
+                />
+                {isVideoDisabled && (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-400 text-xs gap-2">
+                    <VideoOff className="w-10 h-10 text-slate-500" />
+                    <span className="font-semibold text-slate-300">Your Camera is Paused</span>
+                    <p className="text-[11px] text-slate-500">Click video button below to turn camera on</p>
+                  </div>
+                )}
+
+                {/* Your Camera Header Tag */}
+                <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20 pointer-events-none">
+                  <div className="flex items-center gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 pointer-events-auto">
+                    <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-pink-600 flex items-center justify-center text-white font-bold text-xs">
+                      {user?.displayName?.charAt(0).toUpperCase() || 'Y'}
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-white block">You (Your Camera)</span>
+                      <span className="text-[10px] text-purple-300 flex items-center gap-1 font-mono">
+                        <Camera className="w-3 h-3 text-emerald-400" />
+                        {isVideoDisabled ? 'Camera Disabled' : 'HD Camera Active'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 pointer-events-auto">
+                    <button
+                      onClick={toggleMirror}
+                      className="p-1.5 rounded-lg bg-black/60 hover:bg-black/90 text-slate-300 hover:text-white border border-white/10 text-[11px] font-semibold flex items-center gap-1 backdrop-blur-md transition-colors"
+                      title="Toggle Camera Selfie Mirror"
+                    >
+                      <Repeat className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">{isLocalMirrored ? 'Mirrored' : 'Normal'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* PICTURE-IN-PICTURE (PiP) MODE */
+            <>
+              <div className="relative w-full h-full flex items-center justify-center bg-black">
+                {mainVideoSource === 'remote' ? (
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className={`w-full h-full ${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
+                  />
+                ) : (
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full ${isLocalMirrored ? 'scale-x-[-1] ' : ''}${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'} ${isVideoDisabled ? 'hidden' : ''}`}
+                  />
+                )}
+                {/* Fallback if remote video hasn't rendered tracks yet */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-none -z-0">
+                  <div className="w-24 h-24 rounded-3xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-3xl font-extrabold text-indigo-300 shadow-2xl mb-4">
+                    {partner?.displayName?.charAt(0).toUpperCase() || 'P'}
+                  </div>
+                  <h3 className="text-xl font-bold text-white">{partner?.displayName || 'Matched Adult Peer'}</h3>
+                  <p className="text-xs text-indigo-300 animate-pulse mt-1">
+                    Establishing encrypted WebRTC P2P stream...
+                  </p>
+                </div>
+              </div>
+
+              {/* Local / Inset Video PiP */}
+              <div className="absolute bottom-24 right-4 z-20 w-44 sm:w-60 aspect-[3/4] sm:aspect-video bg-slate-900 rounded-2xl overflow-hidden border-2 border-indigo-500/50 shadow-2xl">
+                {mainVideoSource === 'remote' ? (
+                  <>
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={`w-full h-full object-cover ${isLocalMirrored ? 'scale-x-[-1]' : ''} ${isVideoDisabled ? 'hidden' : ''}`}
+                    />
+                    {isVideoDisabled && (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-400 text-xs gap-1">
+                        <VideoOff className="w-6 h-6 text-slate-500" />
+                        <span>Camera Off</span>
+                      </div>
+                    )}
+                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] bg-black/70 px-2 py-0.5 rounded text-white font-medium">
+                      <span>You</span>
+                      <button onClick={swapVideos} className="hover:text-indigo-400 flex items-center gap-1 font-bold">
+                        <Repeat className="w-3 h-3" /> Swap View
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <video
+                      ref={remoteVideoRef}
+                      autoPlay
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] bg-black/70 px-2 py-0.5 rounded text-white font-medium">
+                      <span>{partner?.displayName || 'Partner'}</span>
+                      <button onClick={swapVideos} className="hover:text-indigo-400 flex items-center gap-1 font-bold">
+                        <Repeat className="w-3 h-3" /> Swap View
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -189,9 +352,46 @@ export function QueuePage() {
               </div>
             </div>
 
-            {/* Right: Transparent Billing / Free Call / Free Preview Badge */}
+            {/* Center: Dual Camera Layout Quick Switcher (only in Video mode) */}
+            {callMode !== 'AUDIO' && (
+              <div className="hidden sm:flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-2xl border border-white/10 pointer-events-auto">
+                <button
+                  onClick={() => layoutMode !== 'GRID' && toggleLayoutMode()}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    layoutMode === 'GRID'
+                      ? 'bg-[#7960D8] text-white shadow-md'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Dual Camera Split Screen (Both cameras clear)"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Dual Cameras (50/50)</span>
+                </button>
+                <button
+                  onClick={() => layoutMode !== 'PIP' && toggleLayoutMode()}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    layoutMode === 'PIP'
+                      ? 'bg-[#7960D8] text-white shadow-md'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Picture-in-Picture View"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Picture-in-Picture</span>
+                </button>
+              </div>
+            )}
+
+            {/* Right: Transparent Billing / Free Call / Girl Free Call Badge */}
             <div className="pointer-events-auto">
-              {isFreeCall ? (
+              {(user?.gender === 'FEMALE' || isFreeForReceiver) ? (
+                <div className="flex items-center gap-2 bg-gradient-to-r from-pink-600/95 to-purple-600/95 backdrop-blur-md border border-white/20 px-3.5 py-1.5 rounded-2xl text-xs text-white shadow-lg font-bold">
+                  <Sparkles className="w-4 h-4 text-pink-200 animate-pulse" />
+                  <span>
+                    Girl Free Call: <strong className="font-mono text-white">₹0.00</strong> (Free to Receive)
+                  </span>
+                </div>
+              ) : isFreeCall ? (
                 <div className="flex items-center gap-2 bg-[#FF6347]/95 backdrop-blur-md border border-white/20 px-3.5 py-1.5 rounded-2xl text-xs text-white shadow-tomato font-bold">
                   <Gift className="w-4 h-4 animate-bounce" />
                   <span>
@@ -214,30 +414,8 @@ export function QueuePage() {
             </div>
           </div>
 
-          {/* Local Video PiP (only shown in video mode) */}
-          {callMode !== 'AUDIO' && (
-            <div className="absolute bottom-24 right-4 z-20 w-36 sm:w-48 aspect-[3/4] bg-slate-900 rounded-2xl overflow-hidden border-2 border-indigo-500/50 shadow-2xl">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`w-full h-full object-cover ${isVideoDisabled ? 'hidden' : ''}`}
-              />
-              {isVideoDisabled && (
-                <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-400 text-xs gap-1">
-                  <VideoOff className="w-6 h-6 text-slate-500" />
-                  <span>Camera Off</span>
-                </div>
-              )}
-              <span className="absolute bottom-2 left-2 text-[10px] bg-black/60 px-2 py-0.5 rounded text-white font-medium">
-                You
-              </span>
-            </div>
-          )}
-
           {/* Floating Call Action Controls */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2.5 sm:gap-3 bg-slate-950/90 backdrop-blur-xl px-4 sm:px-5 py-3 rounded-full border border-slate-800 shadow-2xl">
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 sm:gap-2.5 bg-slate-950/90 backdrop-blur-xl px-4 sm:px-5 py-3 rounded-full border border-slate-800 shadow-2xl">
             {/* Audio Toggle */}
             <button
               onClick={toggleAudio}
@@ -263,6 +441,32 @@ export function QueuePage() {
             >
               {isVideoDisabled ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
             </button>
+
+            {/* Layout Mode Toggle (Split Dual Camera vs PiP) */}
+            {callMode !== 'AUDIO' && (
+              <button
+                onClick={toggleLayoutMode}
+                className={`p-3 sm:p-3.5 rounded-full transition-all ${
+                  layoutMode === 'GRID'
+                    ? 'bg-[#7960D8] text-white shadow-lg shadow-[#7960D8]/30'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                }`}
+                title={layoutMode === 'GRID' ? 'Switch to Picture-in-Picture View' : 'Switch to Dual Camera Split View (Both Cameras Clear)'}
+              >
+                {layoutMode === 'GRID' ? <LayoutGrid className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
+              </button>
+            )}
+
+            {/* Camera Fit Toggle (No Crop Fit vs Fill) */}
+            {callMode !== 'AUDIO' && (
+              <button
+                onClick={toggleVideoFit}
+                className="p-3 sm:p-3.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all"
+                title={videoFitMode === 'contain' ? 'Fill Video Frame' : 'Fit Entire Camera (No Cropping)'}
+              >
+                {videoFitMode === 'contain' ? <Maximize2 className="w-5 h-5" /> : <Minimize2 className="w-5 h-5" />}
+              </button>
+            )}
 
             {/* Chat Toggle Button */}
             <button

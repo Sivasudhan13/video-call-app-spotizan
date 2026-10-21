@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { Card, CardHeader } from '../components/common/Card';
@@ -232,6 +232,29 @@ export function CreatorDashboardPage() {
 
       {error && <Alert type="error" title="Action Error">{error}</Alert>}
       {successMsg && <Alert type="success" title="Success">{successMsg}</Alert>}
+
+      {/* Live Call Receiving Station Callout Banner */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-[#2A1B54] to-[#7960D8] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0">
+            <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm sm:text-base text-white">Live Call Receiving Station</h3>
+              <Badge variant="adult" className="bg-emerald-400 text-slate-950 font-black text-[9px] py-0 border-none">100% FREE TO RECEIVE</Badge>
+            </div>
+            <p className="text-xs text-purple-200">
+              Girls receive all incoming calls free. Check your camera clarity, preview lighting, and answer incoming customer calls directly.
+            </p>
+          </div>
+        </div>
+        <Link to="/receive-calls" className="shrink-0">
+          <Button variant="primary" size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold border-none shadow-md">
+            Open Receiving Station →
+          </Button>
+        </Link>
+      </div>
 
       {/* KYC Status Banner */}
       {!profile?.isVerified ? (
